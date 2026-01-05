@@ -1,0 +1,39 @@
+---
+title: "Seurat_tail_cell_cycle_scoring"
+output: html_document
+date: "2025-07-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries and tail file
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+
+tail <- LoadSeuratRds(file = "tail_final.rds")
+```
+
+# This code is based off of Tirosh et al., 2015, doi: 10.1101/gr.192237.115 and adapted by SBP
+
+```{r}
+# Load cell cycle expression matrix
+exp.mat <- read.table(file = "nestorawa_forcellcycle_expressionMatrix.txt",
+    header = TRUE, as.is = TRUE, row.names = 1)
+
+# A list of cell cycle markers, from Tirosh et al, 2015, is loaded with Seurat.  We can
+# segregate this list into markers of G2/M phase and markers of S phase
+s.genes <- tolower(cc.genes$s.genes)
+g2m.genes <- tolower(cc.genes$g2m.genes)
+tail <- CellCycleScoring(tail, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+tail[[]]
+DimPlot(tail, group.by = "Phase")
+
+#save
+saveRDS(tail, file = "tail_final.rds")
+
+```
