@@ -1,0 +1,123 @@
+---
+title: "Seurat_neural_annotations_final"
+output: html_document
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+
+# Make it so my computer can actually run this code
+#options(future.globals.maxSize = 1024^4)
+```
+
+# Load tail file
+```{r}
+tail <- LoadSeuratRds(file = "tail_final.rds")
+```
+
+# First let's do some basic processing on the neural dataset and see how it looks
+```{r}
+# visualize all tail cell types
+DimPlot(tail, group.by = "seurat_cell_types", label = TRUE)
+
+# Subset neurons - based on rpca_clusters
+neural <- subset(x = tail, subset = (seurat_cell_types == "Neural Progenitor Cells" | seurat_cell_types == "Differentiating Neurons" | seurat_cell_types == "Neurons"))
+
+# Visualize to confirm subset ran
+DimPlot(neural, group.by = "seurat_cell_types", label = TRUE)
+
+# Normalize, etc REGRESS OUT SAMPLE AND NFEAT_RNA
+neural_scale <- NormalizeData(neural)
+neural_scale <- ScaleData(neural_scale, vars.to.regress = c("Sample", "nFeature_RNA"))
+neural_scale <- FindVariableFeatures(neural_scale, selection.method = "vst", nfeatures = 2000)
+neural_scale <- RunPCA(neural_scale, features = VariableFeatures(object = neural_scale))
+neural_scale <- FindNeighbors(neural_scale, dims=1:50, reduction = "pca")
+neural_scale <- FindClusters(neural_scale, resolution = 2)
+neural_scale <- RunUMAP(neural_scale, dims = 1:50)
+
+# Look at basic paramaters
+DimPlot(neural_scale, reduction = "umap", group.by = "seurat_cell_types")
+DimPlot(neural_scale, reduction = "umap", group.by = "Sample")
+DimPlot(neural_scale, reduction = "umap", group.by = "doublet_finder")
+FeaturePlot_scCustom(neural_scale, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.rp")
+FeaturePlot_scCustom(neural_scale, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.mt")
+FeaturePlot_scCustom(neural_scale, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nCount_RNA")
+FeaturePlot_scCustom(neural_scale, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nFeature_RNA")
+
+# Save as you go
+#saveRDS(neural, file = "../neural_final.rds")
+```
+
+# There does seem to be some separation based on the Samples, so I double checked if SCTransform would work better. SCTransform was NOT the vibe- it accentuates the differences between nCount/nFeature/Percent.RP grouping
+# DO NOT RUN, BUT INCLUDED FOR CONTEXT
+```{r}
+# SCTransform
+#neural_sct <- SCTransform(neural, vars.to.regress = "Sample", verbose = FALSE)
+
+#neural_sct <- RunPCA(neural_sct, features = VariableFeatures(object = neural_sct))
+#neural_sct <- RunUMAP(neural_sct, dims = 1:50)
+
+#neural_sct <- FindNeighbors(neural_sct, dims=1:50)
+#neural_sct <- FindClusters(neural_sct, resolution = 2)
+
+# Look at basic paramaters
+#DimPlot(neural_sct, reduction = "umap", group.by = "cell_types")
+#DimPlot(neural_sct, reduction = "umap", group.by = "Sample")
+#DimPlot(neural_sct, reduction = "umap", group.by = "doublet_finder")
+
+#FeaturePlot_scCustom(neural_sct, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.rp")
+#FeaturePlot_scCustom(neural_sct, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.mt")
+#FeaturePlot_scCustom(neural_sct, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nCount_RNA")
+#FeaturePlot_scCustom(neural_sct, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nFeature_RNA")
+```
+
+# Integrate by Sample
+```{r}
+neural_int <- neural_scale
+neural_int[["RNA"]] <- split(neural_int[["RNA"]], f = neural_int$Sample)
+
+neural_int <- IntegrateLayers(object = neural_int, method = RPCAIntegration, orig.reduction = "pca", new.reduction = "integrated.rpca",
+    verbose = FALSE)
+
+# re-join layers after integration
+neural_int[["RNA"]] <- JoinLayers(neural_int[["RNA"]])
+
+neural_int <- FindNeighbors(neural_int, reduction = "integrated.rpca", dims = 1:40)
+neural_int <- FindClusters(neural_int, resolution = 1)
+neural_int <- RunUMAP(neural_int, dims = 1:40, reduction = "integrated.rpca")
+
+# Look at basic paramaters
+DimPlot(neural_int, reduction = "umap", group.by = "cell_types")
+DimPlot(neural_int, reduction = "umap", group.by = "Sample")
+DimPlot(neural_int, reduction = "umap", group.by = "doublet_finder")
+DimPlot(neural_int, reduction = "umap", group.by = "Phase")
+
+FeaturePlot_scCustom(neural_int, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.rp")
+FeaturePlot_scCustom(neural_int, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "percent.mt")
+FeaturePlot_scCustom(neural_int, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nCount_RNA")
+FeaturePlot_scCustom(neural_int, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = "nFeature_RNA")
+
+# relabel is full finaly copy
+neural <- neural_int
+
+# double check the quality of cells
+neural@meta.data$NoGood <- ifelse(neural@meta.data$nFeature_RNA > 800, "Good", "No Good")
+DimPlot(neural, reduction = "umap", group.by = "NoGood", label = FALSE)
+```
+# Okay I'm actually really happy with that- so the ScaleData and Integration is the way to go! Very clear clusters that I feel represent what I expect to see. Plus, while there's still some residual separation based on nFeature, etc it's much better
+
+# factor samples and save
+```{r}
+neural@meta.data$Sample <- factor(neural@meta.data$Sample, levels = c("un0dpa", "un1dpa", "un3dpa", "un7dpa", "0dpa", "1dpa", "3dpa", "7dpa"))
+
+saveRDS(neural, file = "neural_final.rds")
+```
