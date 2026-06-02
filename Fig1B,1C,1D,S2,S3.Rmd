@@ -1,0 +1,281 @@
+---
+title: "tail_figures"
+output: html_document
+date: "2025-07-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+```
+
+Load tail file
+```{r}
+tail <- LoadSeuratRds(file = "tail_final.rds")
+```
+
+Figure 1B
+```{r}
+palette <- c("Neural Progenitor Cells" = "#195F17", 
+                     "Differentiating Neurons" = "#45AE61", 
+                     "Neurons" = "#84E291",                           
+                     "Syndetome" = "darkorange1", 
+                     "Sclerotome" = "brown2", 
+                     "Somitic Mesenchyme" = "darkgoldenrod2", 
+                     "Presomitic Mesoderm" = "mediumpurple2", 
+                     "Satellite Cells" = "magenta2", 
+                     "Skeletal Muscle" = "magenta3", 
+                     "Notochord" = "mediumpurple3", 
+                     "Immune Cells" = "deepskyblue", 
+                     "Goblet Cells" = "gold1", 
+                     "Secretory Cells" = "goldenrod1", 
+                     "Basal Cells" = "goldenrod3", 
+                     "Ionocytes" = "blueviolet", 
+                     "Melanocytes" = "dodgerblue3", 
+                     "cnfn+ Epidermal Cells" = "slateblue3", 
+                     "Schwann Cells" = "dodgerblue4",  
+                     "Erythrocytes" = "deeppink4", 
+                     "Endothelial Cells" = "deeppink2", 
+                     "dnah3+ Cells" = "blue")
+
+
+DimPlot(tail, reduction = "umap.rpca", group.by = "seurat_cell_types", label = FALSE, label.size = 3, repel = TRUE, cols = palette, alpha = 0.5) + 
+  theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.line = element_blank(), axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 18)) + scale_x_continuous(limits = c(-16, 15)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(10, 'pt')))
+
+#ggsave("1B.png", width = 6.5, height = 6.5, units = c("in"), dpi = 300)
+```
+
+Find markers to make supplementary figure 3
+```{r}
+# factor level
+tail@meta.data$seurat_cell_types <- factor(tail@meta.data$seurat_cell_types, levels = c(
+                "Neural Progenitor Cells", "Differentiating Neurons", "Neurons",                           
+                "Sclerotome", "Syndetome", "Somitic Mesenchyme", "Satellite Cells", "Skeletal Muscle", "Presomitic Mesoderm", "Notochord", "Immune Cells", "Goblet Cells", "Secretory Cells", "Basal Cells", "Ionocytes", "Melanocytes", "Schwann Cells",  "cnfn+ Epidermal Cells", "Erythrocytes", "Endothelial Cells", "dnah3+ Cells"))
+
+tail.markers <- FindAllMarkers(tail, only.pos = TRUE, group.by = "seurat_cell_types")
+tail.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 3) %>%
+    ungroup() -> top3
+DoHeatmap(tail, 
+          features = top3$gene, 
+          group.by = "seurat_cell_types", 
+          group.colors = palette, 
+          size = 2, 
+          draw.lines = FALSE) + 
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue")) + 
+  theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in"), 
+        legend.position="none")
+
+ggsave("S3.png", width = 6.5, height = 5.5, units = c("in"), dpi = 300)
+```
+
+Figure S2A
+```{r}
+
+tail@meta.data$Condition2 <- as.character(tail@meta.data$Condition)
+tail@meta.data$Condition2 =
+  dplyr::recode(tail@meta.data$Condition2,
+             "un0dpa" = "Uninjured",
+             "un1dpa" = "Uninjured",
+             "un3dpa" = "Uninjured",
+             "un7dpa" = "Uninjured",
+             "0dpa" = "Regenerating",
+             "1dpa" = "Regnerating",
+             "7dpa" = "Regenerating")
+
+tail@meta.data$Condition2 <- factor(tail@meta.data$Condition2, levels = c("Uninjured", "Regenerating"))
+
+palette <- c("black", "grey")
+
+DimPlot(tail, 
+        group.by = "Condition2", 
+        reduction = "umap.rpca",
+        pt.size = 0.02, 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE,
+        alpha = 0.2,
+        cols = palette) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+ggsave("S2A.png", width = 3, height = 3, units = c("in"), dpi = 300)
+```
+
+Figure S2F
+```{r}
+FeaturePlot(tail, 
+        features = "percent.mt", 
+        reduction = "umap.rpca",
+        pt.size = 0.02, 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+ggsave("S2F.png", width = 3, height = 2.5, units = c("in"), dpi = 300)
+```
+
+Figure S2H
+```{r}
+tail[[]]
+FeaturePlot(tail, 
+        features = "percent.rp", 
+        reduction = "umap.rpca",
+        pt.size = 0.02, 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+ggsave("S2H.png", width = 3, height = 2.5, units = c("in"), dpi = 300)
+```
+
+Figure S2B
+```{r}
+FeaturePlot(tail, 
+        features = "nFeature_RNA", 
+        reduction = "umap.rpca",
+        pt.size = 0.02, 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+ggsave("S2B.png", width = 3, height = 2.5, units = c("in"), dpi = 300)
+```
+
+Figure S2D
+```{r}
+FeaturePlot(tail, 
+        features = "nCount_RNA", 
+        reduction = "umap.rpca",
+        pt.size = 0.02, 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+ggsave("S2D.png", width = 3, height = 2.5, units = c("in"), dpi = 300)
+```
+
+Figure 1C
+```{r}
+DimPlot(tail, 
+        group.by = "seurat_cell_types", 
+        reduction = "umap.rpca",
+        pt.size = 0.01, 
+        split.by = "Sample", 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE, 
+        cols = palette, 
+        ncol= 8) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-13, 17)) + 
+  scale_x_continuous(limits = c(-16, 14)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -16, xend = -16 + c(5, 0),
+            y = -13, yend = -13 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+
+#ggsave("1C.png", width = 12, height = 2, units = c("in"), dpi = 300)
+```
+
+Figure S2C,E,G,I
+```{r}
+VlnPlot(tail, features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.rp"), ncol = 4, group.by =  "Sample", pt.size = 0)
+ggsave("S2.png", width = 12, height = 3, units = c("in"), dpi = 300)
+```
+
+Figure 1D - First submission pie charts
+```{r}
+ggplot(tail@meta.data, aes(x = "", fill = seurat_cell_types)) + 
+  geom_bar(position = "fill") + 
+  coord_polar("y", start=0) + 
+  scale_fill_manual(values=palette) +
+  facet_wrap(~Sample, ncol= 4) +
+  theme_classic() +
+  theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.title = element_blank(), legend.position = "None", strip.background = element_rect(fill = "white", color = "white"), panel.border = element_blank(), axis.line = element_blank())
+#ggsave("1D.png", width = 9, height = 5, units = c("in"), dpi = 300)
+```
+
+Figure 1D - Resubmission stacked bar plots
+```{r}
+ggplot(tail@meta.data, aes(x = "", fill = seurat_cell_types)) + 
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values=palette) +
+  facet_wrap(~Sample, ncol= 4) +
+  theme_classic() +
+  theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.title = element_blank(), legend.position = "None", strip.background = element_rect(fill = "white", color = "white"), panel.border = element_blank(), axis.line = element_blank())
+ggsave("1D.png", width = 9, height = 5, units = c("in"), dpi = 300)
+```
