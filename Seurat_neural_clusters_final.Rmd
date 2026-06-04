@@ -1,0 +1,114 @@
+---
+title: "Seurat_neural_clusters"
+output: html_document
+date: "2025-07-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+```
+
+Load dataset
+```{r}
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+Looking at basic neural cell types
+```{r}
+# Neural patterning genes
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("nkx2-1", "nkx2-2", "nkx6-1", "msx1", "msx2", "pax6", "sox2", "iqca1"))
+
+# Differentiating Neurons
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("prph", "myt1", "dll1", "neurog2 ", "neurod1", "neurog1", "isl2"))
+
+# Mature Neurons 
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("calm1", "kcnb2", "tubb2b", "dcx"))
+```
+
+Defining Neurons types based on gene expression profiles
+```{r}
+# Rohon Beard Neurons
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("tlx3", "isl1", "isl2", "prdm14"))
+
+# Kolmer-Agduhr Interneurons
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("lhx1", "tal2", "gata2", "gata3", "ascl1", "pkd1l2", "gad2", "slc32a1"))
+
+# Interneurons
+  # Glutamate
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("slc17a7", "cpne5", "drd1", "evx1", "nrn1"))
+
+  # GABA/Glycine
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("slc32a1", "lamp5", "slc6a5"))
+
+  # all
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("lhx1", "pnoc"))
+
+#Motor Neurons
+ # prdm14- 
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("isl1", "isl2", "irx1", "irx3", "prdm16", "ptprm", "ccdc85a", "drd2"))
+
+  # prdm14+
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("prdm1", "prdm14", "cdx4", "adarb2"))
+
+  # lep+ 
+FeaturePlot_scCustom(neural, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("lep", "cyp3a4.2", "stx3", "aff1", "cyp3a4.2", "lepr"))
+```
+
+Looking for different cell markers
+```{r}
+markers <- FindAllMarkers(neural, only.pos = TRUE, group.by = "seurat_clusters")
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+FeaturePlot(neural, features = (top10[which(top10$cluster == "19"),] )$gene)
+
+DimPlot(neural, group.by = "seurat_clusters", label = TRUE)
+```
+
+Adding in cell types
+```{r}
+neural@meta.data$neural_cell_types <- as.character(neural@meta.data$seurat_clusters)
+
+neural@meta.data$neural_cell_types =
+  dplyr::recode(neural@meta.data$neural_cell_types,
+                "0" = "Neural Progenitor Cells",
+                "1" = "Neural Progenitor Cells",
+                "3" = "Differentiating Motor Neurons",
+                "4" = "Motor Neurons",
+                "5" = "Neural Progenitor Cells",
+                "6" = "Neural Progenitor Cells",
+                "7" = "Glutamatergic Interneurons", 
+                "8" = "Neural Progenitor Cells",
+                "9" = "prdm14+ Motor Neurons",
+                "10" = "Motor Neurons",
+                "11" = "Motor Neurons",
+                "12" = "Motor Neurons",
+                "13" = "Motor Neurons",
+                "14" = "lep+ Motor Neurons",
+                "15" = "Neural Progenitor Cells",
+                "16" = "GABA/Glycinergic Interneurons",
+                "17" = "Kolmer-Agduhr Interneurons",
+                "18" = "Kolmer-Agduhr Interneurons",
+                "19" = "Roof Plate",
+                "20" = "Differentiating Interneurons",
+                "21" = "Floor Plate",
+                "22" = "vsx2+ Interneurons",
+                "23" = "Motor Neurons",
+                "24" = "Rohon Beard Neurons")
+
+# double check everything
+DimPlot(neural, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+DimPlot(neural, group.by = "neural_cell_types", label = FALSE)
+
+# save
+saveRDS(neural, file = "neural.rds")
+```

@@ -1,0 +1,162 @@
+---
+title: "Neuron_neurotransmitters"
+output: html_document
+date: "2025-07-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+```
+
+# Load dataset and level Samples
+```{r}
+neural <- LoadSeuratRds(file = "neural_final.rds")
+neural[[]]
+```
+
+```{r}
+Neurons <- subset(x = neural, subset = (neural@meta.data$neural_cell_types == "Motor Neurons" | 
+             neural@meta.data$neural_cell_types == "Glutamatergic Interneurons" | 
+            neural@meta.data$neural_cell_types ==  "prdm14+ Motor Neurons" | 
+             neural@meta.data$neural_cell_types == "lep+ Motor Neurons" | 
+             neural@meta.data$neural_cell_types == "GABA/Glycinergic Interneurons" | 
+             neural@meta.data$neural_cell_types == "Kolmer-Agduhr Interneurons" | 
+              neural@meta.data$neural_cell_types == "vsx2+ Interneurons" | 
+              neural@meta.data$neural_cell_types == "Rohon Beard Neurons"))
+
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("th", "slc17a7", "slc6a5", "chat", "tal1", "gad2"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("sox1", "tal1", "lhx3",	"sox21",	"sox14",	"prdm8"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("hb9", "gata3", "shox2"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("dmrt3", "foxd3", "isl1", "ptf1a", "tlx3"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("dmrt3", "lbx1", "dbx2", "lhx1", "pnoc", "pax2", "gbx2", "en1"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("klhl14", "skor1", "cartpt", "cacna2d3", "gria1", "lmx1b", "tox2", "hmx2", "ntrk1", "gbx2"))
+FeaturePlot_scCustom(INs2, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("atf3", "vamp4", "syt11", "sox11", "bdnf", "klf6", "adcyap1"))
+DotPlot_scCustom(INs2, features = c("atf3", "vamp4", "syt11", "sox11", "bdnf", "klf6", "adcyap1"), group.by = "INs_names")
+
+#atf3 and bdnf 
+
+DimPlot(INs2, group.by = "INs_names")
+
+
+Expressed = GetAssayData(object=Neurons,assay="RNA",slot="data")["chat",]
+Expressed_df=data.frame( positive= Expressed > 0, negative = Expressed == 0)
+Neurons <- AddMetaData(Neurons,metadata=Expressed_df)
+Neurons@meta.data$chat_positive <- Neurons@meta.data$positive
+Neurons@meta.data$positive <- NULL
+Neurons@meta.data$negative <- NULL
+Neurons[[]]
+
+```
+
+# Looking at cell types by neurotransmitter
+```{r}
+neural@meta.data$neurotransmitter_cell_types =
+  dplyr::recode(neural@meta.data$seurat_clusters, 
+             "10" = "Cholinergic Neurons",
+             "11" = "Cholinergic Neurons",
+             "12" = "Cholinergic Neurons",
+             "13" = "Cholinergic Neurons",
+             "14" = "Cholinergic Neurons",
+             "4" = "Cholinergic Neurons",
+             "23" = "Cholinergic Neurons",
+             "9" = "Cholinergic Neurons",
+             "7" = "Glutamatergic Neurons", 
+             "22" = "Glutamatergic Neurons",
+             "16" = "GABAergic/Glycinergic Neurons",
+             "24" = "Glutamatergic/Cholinergic",
+             "19" = "Neural Progenitor Cells",
+             "1" = "Neural Progenitor Cells",
+             "0" = "Neural Progenitor Cells",
+             "6" = "Neural Progenitor Cells",
+             "21" = "Neural Progenitor Cells",
+             "15" = "Neural Progenitor Cells",
+             "8" = "Neural Progenitor Cells",
+             "5" = "Neural Progenitor Cells",
+             "3" = "Neural Progenitor Cells",
+             "20" = "Neural Progenitor Cells",
+             "17" = "GABAergic",
+             "18" = "GABAergic/Dopaminergic"
+
+)
+
+neural@meta.data$Big_neurotransmitter_cell_types =
+  dplyr::recode(neural@meta.data$neurotransmitter_cell_types, 
+             "Cholinergic Neurons" = "No",
+             "Glutamatergic Neurons" = "Excitatory", 
+             "GABAergic/Glycinergic Neurons" = "Inhibitory",
+             "Glutamatergic/Cholinergic" = "Excitatory",
+             "GABAergic" = "Inhibitory",
+             "GABAergic/Dopaminergic" = "Inhibitory",
+             "Cholinergic Neurons" = "No",
+             "Neural Progenitor Cells" = "No"
+)
+
+neural[[]]
+
+
+anotherpalette1 = c(No = "grey", "Inhibitory" = "grey40", "Excitatory" = "black")
+
+DimPlot(neural, group.by = "Big_neurotransmitter_cell_types", label = FALSE, label.size = 3, repel = TRUE, alpha = 0.5, cols = anotherpalette1) +   theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.line = element_blank(), axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-11, 7)) + scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(10, 'pt')))
+ggsave("ei_ratio_umap.png", width = 4.5, height = 3.5, units = c("in"), dpi = 300)
+
+
+new3 <- neural[[]] %>% group_by(Big_neurotransmitter_cell_types, Sample, Condition, Age) %>% summarize(n())
+new3
+new3$Percentage <- new3$Sample
+new3$Percentage <- dplyr::recode(new3$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+new3 <- new3[which(new3$Big_neurotransmitter_cell_types != "No"), ]
+new3
+#E/I ratio
+Sample <- unique(new3$Sample)
+Ratio <- c((19/50), (114/137), (21/74), (186/128), (58/100), (179/78), (13/18), (22/21))
+Condition <- c("Uninjured", "Regenerating", "Uninjured", "Regenerating", "Uninjured", "Regenerating", "Uninjured", "Regenerating")
+new4 <- data.frame(Sample = Sample, Ratio = Ratio, Condition = Condition)
+new4$prettyRatio <- specify_decimal((new4$Ratio), 2)
+new4
+
+
+anotherpalette = c("white", "black")
+
+ggplot(new4, aes(x = Sample, y = prettyRatio, pattern = Condition)) + 
+  geom_bar_pattern(stat = "identity",
+                   aes(pattern_fill = Condition,
+                   colour  = Condition,
+                   pattern_color = Condition),
+                   pattern_density = 0.2,
+                   pattern_spacing = 0.02,
+                   fill    = "black",
+                   pattern = 'stripe') + 
+  scale_pattern_fill_manual(values=anotherpalette) +
+  scale_pattern_colour_manual(values=anotherpalette) +
+  scale_colour_manual(values=anotherpalette) +
+  geom_text(aes(label=prettyRatio), vjust=-0.3, size = 2, color = "black") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(axis.text = element_text(size = 9, color = "black"), axis.text.x = element_text(size = 9, color = "black", angle = 45, hjust=1, vjust=1), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA")) +
+  NoLegend()
+ggsave("ei_ratio.png", width = 3, height = 2, units = c("in"), dpi = 300)
+
+```

@@ -1,0 +1,276 @@
+---
+title: "neural_figures"
+output: html_document
+date: "2025-07-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+library(xSelectCells)
+```
+#devtools::install_github('vikkki/xSelectCells@main', force = TRUE)
+
+Load dataset and level Samples
+```{r}
+neural <- LoadSeuratRds(file = "neural_final.rds")
+INs <- LoadSeuratRds(file = "INs.rds")
+MNs <- LoadSeuratRds(file = "MNs.rds")
+```
+Go run the INs and MNs sets and come back
+
+Make palette
+```{r}
+# make a palette
+palette <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#EBC2F3",
+             "isl2+ Motor Neurons" = "magenta2",
+             "Excitatory Interneurons" = "green4", 
+             "prdm14+ Motor Neurons" = "#AD03AE",
+             "Inhibitory Interneurons" = "green3",
+             "Kolmer-Agduhr Interneurons" = "green1",
+             "Roof Plate" = "#EBEBEB",
+             "Differentiating Interneurons" = "#B7E9BA",
+             "Floor Plate" = "#C1C1C1",
+             "Rohon Beard Neurons" = "goldenrod1")
+```
+
+Reprocess MNs
+```{r}
+# recluster MNs to identify regenerating cells
+MNs <- FindClusters(MNs, resolution = 5)
+
+# label
+MNs@meta.data$MN_names <- as.character(MNs@meta.data$seurat_clusters)
+MNs@meta.data$MN_names =
+  dplyr::recode(MNs@meta.data$MN_names,
+                "0" = "isl2+ Motor Neurons",
+                "1" = "isl2+ Motor Neurons",
+                "2" = "isl2+ Motor Neurons",
+                "3" = "isl2+ Motor Neurons",
+                "4" = "Regenerating isl2+ Motor Neurons",
+                "5" = "isl2+ Motor Neurons",
+                "6" = "Differentiating Motor Neurons",
+                "7" = "isl2+ Motor Neurons", 
+                "8" = "isl2+ Motor Neurons",
+                "9" = "isl2+ Motor Neurons",
+                "10" = "isl2+ Motor Neurons",
+                "11" = "isl2+ Motor Neurons",
+                "12" = "Differentiating Motor Neurons",
+                "13" = "Differentiating Motor Neurons",
+                "14" = "prdm14+ Motor Neurons",
+                "15" = "isl2+ Motor Neurons",
+                "16" = "prdm14+ Motor Neurons",
+                "17" = "Differentiating Motor Neurons",
+                "18" = "prdm14+ Motor Neurons",
+                "19" = "Regenerating isl2+ Motor Neurons",
+                "20" = "Differentiating Motor Neurons",
+                "21" = "Differentiating Motor Neurons",
+                "22" = "isl2+ Motor Neurons",
+                "23" = "isl2+ Motor Neurons",
+                "24" = "Regenerating isl2+ Motor Neurons",
+                "25" = "isl2+ Motor Neurons",
+                "26" = "prdm14+ Motor Neurons",
+                "27" = "isl2+ Motor Neurons",
+                "28" = "isl2+ Motor Neurons",
+                "29" = "isl2+ Motor Neurons",
+                "30" = "isl2+ Motor Neurons",
+                "31" = "isl2+ Motor Neurons")
+
+DimPlot(MNs, group.by = "seurat_clusters", label = TRUE)
+DimPlot(MNs, group.by = "MN_names", label = TRUE)
+DimPlot(MNs, group.by = "neural_cell_types", label = TRUE)
+DimPlot(MNs, group.by = "Sample", label = TRUE)
+
+# make dataframe so we can look at percentages of these cell types
+MNsDF <- MNs[[]] %>% group_by(MN_names, Sample, Condition, Age) %>% summarize(n())
+MNsDF$Percentage <- MNsDF$Sample
+MNsDF$Percentage <- dplyr::recode(MNsDF$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+MNsDF$Percentage <- MNsDF$`n()` / MNsDF$Percentage
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+MNsDF$prettyPercentage <- specify_decimal((MNsDF$Percentage*100), 2)
+
+# double check pattern
+palette <- c("isl2+ Motor Neurons" = "magenta2", "Regenerating isl2+ Motor Neurons" = "magenta4")
+MNsDF2 <- subset(MNsDF, MNsDF$MN_names == "Regenerating isl2+ Motor Neurons" | MNsDF$MN_names == "isl2+ Motor Neurons")
+
+ggplot(MNsDF2, aes(x = Age, y = Percentage, fill = MN_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition, ncol= 1, strip.position = "right")
+#ggsave("isl2MNs.png", width = 1, height = 2, units = c("in"), dpi = 300)
+```
+
+Now the prdm14+ cells do not want to cluster into uninjured and regenerating cells, so I have to switch to clustering it manually
+```{r}
+# manually isolate regenerating lepr+ prdm14+ cells
+barcodes <- xSelectCells::xSelectCells(MNs)
+MNs$cells_of_interest <- ifelse(rownames(MNs@meta.data) %in% barcodes, "Regenerating prdm14+ Motor Neurons", "prdm14+ Motor Neurons")
+
+MNsP <- subset(x = MNs, subset = (MNs@meta.data$MN_names == "prdm14+ Motor Neurons" | MNs@meta.data$MN_names == "Regenerating prdm14+ Motor Neurons"))
+
+MNsDF3 <- MNsP[[]] %>% group_by(Sample, Condition, Age, cells_of_interest) %>% summarize(n())
+MNsDF3$Percentage <- MNsDF3$Sample
+MNsDF3$Percentage <- dplyr::recode(MNsDF3$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+MNsDF3$Percentage <- MNsDF3$`n()` / MNsDF3$Percentage
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+MNsDF3$prettyPercentage <- specify_decimal((MNsDF3$Percentage*100), 2)
+
+# double check pattern
+palette3 <- c("prdm14+ Motor Neurons" = "magenta2", "Regenerating prdm14+ Motor Neurons" = "magenta4")
+
+ggplot(MNsDF3, aes(x = Age, y = Percentage, fill = cells_of_interest)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition, ncol= 1, strip.position = "right")
+#ggsave("prdm14MNs.png", width = 1, height = 2, units = c("in"), dpi = 300)
+```
+
+Let's add this labelling to the actual MNs object and save it
+```{r}
+MNs@meta.data <- MNs@meta.data %>% mutate(info=paste(MN_names, cells_of_interest, sep = "_"))
+MNs@meta.data
+MNs@meta.data$MN_names =
+  dplyr::recode(MNs@meta.data$info,
+                "isl2+ Motor Neurons_prdm14+ Motor Neurons" = "isl2+ Motor Neurons",
+                "prdm14+ Motor Neurons_prdm14+ Motor Neurons" = "prdm14+ Motor Neurons",
+                "Differentiating Motor Neurons_prdm14+ Motor Neurons" = "Differentiating Motor Neurons",
+                "prdm14+ Motor Neurons_Regenerating prdm14+ Motor Neurons" = "Regenerating prdm14+ Motor Neurons",
+                "Regenerating isl2+ Motor Neurons_Regenerating prdm14+ Motor Neurons" = "Regenerating prdm14+ Motor Neurons",
+                "Regenerating isl2+ Motor Neurons_prdm14+ Motor Neurons" = "Regenerating isl2+ Motor Neurons")
+
+MNs@meta.data$MN_names <- factor(MNs@meta.data$MN_names, levels = c(
+             "prdm14+ Motor Neurons",
+             "isl2+ Motor Neurons",
+             "Regenerating prdm14+ Motor Neurons",
+             "Regenerating isl2+ Motor Neurons",
+             "Differentiating Motor Neurons"))
+
+MNs@meta.data <- MNs@meta.data[,!names(MNs@meta.data) %in% c("cells_of_interest", "info", "sfrp4pos", "cell_types", "NoGood", "nFeat_good", "final_names")]
+MNs@meta.data
+#saveRDS(MNs, file = "MNs.rds")
+
+DotPlot_scCustom(MNs, features = c("lepr"), group.by = "MN_names")
+DimPlot(MNs, group.by = "final_names", label = TRUE)
+```
+
+Okay now look at the interneurons!
+```{r}
+DimPlot(INs, group.by = "Sample", label = FALSE)
+
+# Yeah these are also not going to nicely cluster
+DimPlot(INs, group.by = "seurat_clusters", label = FALSE)
+
+# V2a
+barcodes <- xSelectCells::xSelectCells(INs)
+INs$cells_of_interest <- ifelse(rownames(INs@meta.data) %in% barcodes, "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons", "V2a/b Glutamatergic/Cholinergic Interneurons")
+INs@meta.data <- INs@meta.data %>% mutate(info=paste(INs_names, cells_of_interest, sep = "_"))
+INs@meta.data$INs_names =
+  dplyr::recode(INs@meta.data$info,
+                "KA'' GABAergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "KA'' GABAergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "V1 GABAergic/Glycinergic Interneurons",
+                "V0 Glutamatergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "V0 Glutamatergic Interneurons",
+                "Regenerating V0 Glutamatergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "Regenerating V0 Glutamatergic Interneurons",
+                "V2a/b Glutamatergic/Cholinergic Interneurons_Regenerating V2a/b Glutamatergic/Cholinergic Interneurons" = "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons",
+                "V2a/b Glutamatergic/Cholinergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "dI6 Glycinergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "dI6 Glycinergic Interneurons",
+                "V2b/s GABAergic/Glycinergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "V2b/s GABAergic/Glycinergic Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "KA' GABAergic/Dopaminergic Interneurons",
+                "Intermediate KA Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "Intermediate KA Interneurons",
+                "unknown Glycinergic Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "unknown Glycinergic Interneurons",
+                "Differentiating Interneurons_V2a/b Glutamatergic/Cholinergic Interneurons" = "Differentiating Interneurons")
+
+DimPlot(INs, group.by = "INs_names", label = FALSE)
+
+# V0
+barcodes <- xSelectCells::xSelectCells(INs2)
+
+INs@meta.data <- INs@meta.data[,!names(INs@meta.data) %in% c("info", "cells_of_interest")]
+INs$cells_of_interest <- ifelse(rownames(INs@meta.data) %in% barcodes, "Regenerating V0 Glutamatergic Interneurons", "V0 Glutamatergic Interneurons")
+
+INs@meta.data <- INs@meta.data %>% mutate(info=paste(final_names, cells_of_interest, sep = "_"))
+INs@meta.data$INs_names =
+  dplyr::recode(INs@meta.data$info,
+                "KA'' GABAergic Interneurons_V0 Glutamatergic Interneurons" = "KA'' GABAergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons_V0 Glutamatergic Interneurons" = "V1 GABAergic/Glycinergic Interneurons",
+                "V0 Glutamatergic Interneurons_V0 Glutamatergic Interneurons" = "V0 Glutamatergic Interneurons",
+                "V0 Glutamatergic Interneurons_Regenerating V0 Glutamatergic Interneurons" = "Regenerating V0 Glutamatergic Interneurons",
+                "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons_V0 Glutamatergic Interneurons" = "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons",
+                "dI6 Glycinergic Interneurons_V0 Glutamatergic Interneurons" = "dI6 Glycinergic Interneurons",
+                "V2b/s GABAergic/Glycinergic Interneurons_V0 Glutamatergic Interneurons" = "V2b/s GABAergic/Glycinergic Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons_V0 Glutamatergic Interneurons" = "KA' GABAergic/Dopaminergic Interneurons",
+                "Intermediate KA Interneurons_V0 Glutamatergic Interneurons" = "Intermediate KA Interneurons",
+                "unknown Glycinergic Interneurons_V0 Glutamatergic Interneurons" = "unknown Glycinergic Interneurons",
+                "V2a/b Glutamatergic/Cholinergic Interneurons_V0 Glutamatergic Interneurons" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "Differentiating Interneurons_V0 Glutamatergic Interneurons" = "Differentiating Interneurons",
+                "Differentiating Interneurons_Regenerating V0 Glutamatergic Interneurons" = "Differentiating Interneurons",
+                "V2a/b Glutamatergic/Cholinergic Interneurons_Regenerating V0 Glutamatergic Interneurons" = "Regenerating V0 Glutamatergic Interneurons")
+
+DimPlot(INs, group.by = "INs_names", label = FALSE)
+DimPlot(INs, group.by = "Sample", label = FALSE)
+
+#saveRDS(INs, file = "INs.rds")
+
+INs@meta.data$final_names =
+  dplyr::recode(INs@meta.data$info,
+                "KA'' GABAergic Interneurons" = "KA'' GABAergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons" = "V1 GABAergic/Glycinergic Interneurons",
+                "V0 Glutamatergic Interneurons" = "V0 Glutamatergic Interneurons",
+                "Regenerating V0 Glutamatergic Interneurons" = "V0 Glutamatergic Interneurons",
+                "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "dI6 Glycinergic Interneurons" = "dI6 Glycinergic Interneurons",
+                "V2b/s GABAergic/Glycinergic Interneurons" = "V2b/s GABAergic/Glycinergic Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons" = "KA' GABAergic/Dopaminergic Interneurons",
+                "Intermediate KA Interneurons" = "Intermediate KA Interneurons",
+                "unknown Glycinergic Interneurons" = "unknown Glycinergic Interneurons",
+                "V2a/b Glutamatergic/Cholinergic Interneurons" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "Regenerating V2a/b Glutamatergic/Cholinergic Interneurons" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "Differentiating Interneurons" = "Differentiating Interneurons")
+
+#saveRDS(neural, file = "neural_final.rds")
+```

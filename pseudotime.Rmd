@@ -1,0 +1,115 @@
+---
+title: "neural_figures"
+output: html_document
+date: "2025-07-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+remotes::install_github('satijalab/seurat-wrappers')
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(monocle3)
+library(SeuratWrappers)
+
+neural <- LoadSeuratRds(file = "neural_final.rds")
+neural.cds <- as.cell_data_set(neural, assay = "RNA")
+neural.cds <- estimate_size_factors(neural.cds)
+fData(neural.cds)$gene_short_name <- rownames(fData(neural.cds))
+```
+
+# Load dataset and level Samples
+```{r}
+neural2 <- as.cell_data_set(neural)
+neural2 <- cluster_cells(cds = neural2, reduction_method = "UMAP")
+neural2 <- learn_graph(neural2)
+
+# order cells
+neural2 <- order_cells(neural2, reduction_method = "UMAP")
+
+# plot trajectories colored by pseudotime
+plot_cells(
+  cds = neural2,
+  cell_size = 1,
+  color_cells_by = "pseudotime",
+  show_trajectory_graph = TRUE)
+```
+
+
+```{r}
+palette <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#D6D6D6",
+             "prdm14- Motor Neurons" = "magenta2",
+             "prdm14+ Motor Neurons" = "#9D129F",
+             "Roof Plate" = "#D6D6D6",
+             "Differentiating Interneurons" = "#D6D6D6",
+             "Floor Plate" = "#D6D6D6",
+             "Rohon Beard Neurons" = "#E5AA70",
+             "KA'' GABAergic Interneurons" = "steelblue1",
+                "V1 GABAergic/Glycinergic Interneurons" = "mediumturquoise",
+                "V0 Glutamatergic Interneurons" = "coral1",
+                "dI4, dI6 Glycinergic Interneurons" = "goldenrod1",
+                "V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+                "V2b GABAergic/Glycinergic Interneurons" = "olivedrab3",
+                "KA' GABAergic/Dopaminergic Interneurons" = "dodgerblue4",
+                "Intermediate KA Interneurons" = "dodgerblue3",
+                "unknown Glycinergic Interneurons" = "goldenrod1")
+
+cds_3d <- reduce_dimension(neural.cds, max_components = 3)
+cds_3d <- cluster_cells(cds_3d)
+cds_3d <- learn_graph(cds_3d)
+cds_3d <- order_cells(cds_3d)
+plot_cells_3d(cds_3d, color_cells_by="whole_names", color_palette = palette)
+plot_cells_3d(cds_3d, color_cells_by="pseudotime")
+
+# for one gene
+cds_subset <- cds_3d[rowData(cds_3d)$gene_short_name == "cdh18"]
+plot_genes_in_pseudotime(cds_subset, color_cells_by = "final_names")
+
+# for a list of genes
+genes_we_like <- gene_module_df %>% filter(module %in% c(47))
+a_lineage_cds <- cds_3d[rowData(cds_3d)$gene_short_name %in% genes_we_like]
+plot_genes_in_pseudotime(a_lineage_cds, min_expr=0.5)
+
+cds_pt_res <- graph_test(cds_3d, neighbor_graph="knn", cores=8)
+pr_deg_ids <- row.names(subset(cds_pt_res, q_value < 0.05))
+
+cds_3d <- preprocess_cds(cds_3d, method = "PCA")
+
+gene_module_df <- find_gene_modules(cds_3d[pr_deg_ids,], resolution=1e-3)
+cell_group_df <- tibble::tibble(cell=row.names(colData(cds_3d)), 
+                                cell_group=colData(cds_3d)$seurat_cell_types)
+agg_mat <- aggregate_gene_expression(cds_3d, gene_module_df, cell_group_df)
+row.names(agg_mat) <- stringr::str_c("Module ", row.names(agg_mat))
+colnames(agg_mat) <- stringr::str_c("Partition ", colnames(agg_mat))
+
+pheatmap::pheatmap(agg_mat, cluster_rows=TRUE, cluster_cols=TRUE,
+                   scale="column", clustering_method="ward.D2",
+                   fontsize=4)
+
+plot_cells(cds_3d, 
+           genes=gene_module_df %>% filter(module %in% c(2, 3, 4, 5)),
+           color_cells_by="partition",
+           show_trajectory_graph = FALSE)
+
+plot_cells(cds_3d, 
+           genes=gene_module_df %>% filter(module %in% c(6, 7, 8, 9)),
+           color_cells_by="partition",
+           show_trajectory_graph = FALSE)
+```
+
+```{r}
+neural <- AddMetaData(
+  object = neural,
+  metadata = cds_3d@principal_graph_aux@listData$UMAP$pseudotime,
+  col.name = "pseudotime"
+)
+
+FeaturePlot(neural, c("pseudotime")) + scale_color_viridis_c()
+# look at other diffusion maps/other maps?
+```
+

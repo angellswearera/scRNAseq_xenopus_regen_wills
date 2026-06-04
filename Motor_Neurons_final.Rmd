@@ -1,0 +1,102 @@
+---
+title: "Motor_Neurons"
+output: html_document
+date: "2025-08-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+# Load dataset and level Samples
+```{r}
+DimPlot(neural, group.by = "neural_cell_types", label = TRUE)
+
+MNs <- subset(x = neural, subset = (neural@meta.data$neural_cell_types == "Motor Neurons" |
+            neural@meta.data$neural_cell_types ==  "prdm14+ Motor Neurons" | 
+            neural@meta.data$neural_cell_types == "lep+ Motor Neurons" |
+            neural@meta.data$neural_cell_types == "Differentiating Motor Neurons"))
+
+# Normalize, etc REGRESS OUT SAMPLE AND NFEAT_RNA
+MNs <- NormalizeData(MNs)
+MNs <- ScaleData(MNs, vars.to.regress = c("Sample", "nFeature_RNA"))
+MNs <- FindVariableFeatures(MNs, selection.method = "vst", nfeatures = 2000)
+MNs <- RunPCA(MNs, features = VariableFeatures(object = MNs))
+MNs <- FindNeighbors(MNs, dims=1:50, reduction = "integrated.rpca")
+MNs <- FindClusters(MNs, resolution = 2, reduction.type = "integrated.rpca")
+MNs <- RunUMAP(MNs, dims = 1:50, reduction = "integrated.rpca")
+
+# Look at basic paramaters
+DimPlot(MNs, reduction = "umap", group.by = "neural_cell_types")
+DimPlot(MNs, reduction = "umap", group.by = "Sample")
+DimPlot(MNs, group.by = "seurat_clusters", label = TRUE)
+```
+
+```{r}
+MNs@meta.data$MN_names <- as.character(MNs@meta.data$seurat_clusters)
+MNs@meta.data$MN_names =
+  dplyr::recode(MNs@meta.data$MN_names,
+                "0" = "isl2+ Motor Neurons",
+                "1" = "isl2+ Motor Neurons",
+                "2" = "isl2+ Motor Neurons",
+                "3" = "Differentiating Motor Neurons",
+                "4" = "isl2+ Motor Neurons",
+                "5" = "isl2+ Motor Neurons",
+                "6" = "isl2+ Motor Neurons",
+                "7" = "Differentiating Motor Neurons", 
+                "8" = "prdm14+ Motor Neurons",
+                "9" = "isl2+ Motor Neurons",
+                "10" = "Differentiating Motor Neurons",
+                "11" = "isl2+ Motor Neurons",
+                "12" = "isl2+ Motor Neurons",
+                "13" = "isl2+ Motor Neurons",
+                "14" = "Differentiating Motor Neurons",
+                "15" = "isl2+ Motor Neurons",
+                "16" = "prdm14+ Motor Neurons",
+                "17" = "prdm14+ Motor Neurons",
+                "18" = "isl2+ Motor Neurons",
+                "19" = "isl2+ Motor Neurons")
+DimPlot(MNs, group.by = "seurat_clusters", label = TRUE)
+DimPlot(MNs, group.by = "MN_names", label = TRUE)
+```
+
+```{r}
+MNs@meta.data$MN_names <- factor(MNs@meta.data$MN_names, levels = c(
+             "Differentiating Motor Neurons",
+             "prdm14+ Motor Neurons",
+             "isl2+ Motor Neurons"))
+
+markers <- FindAllMarkers(MNs, only.pos = TRUE, group.by = "MN_names")
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 3) %>%
+    ungroup() -> top10
+FeaturePlot(MNs, features = (top10[which(top10$cluster == "isl2+ Motor Neurons"),] )$gene)
+
+DoHeatmap(MNs, features = top10$gene, group.by = "MN_names", group.colors = MNpalette,size = 3, draw.lines = FALSE) + scale_fill_gradientn(colors = c("grey", "white", "blue")) + theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in"), legend.position="none")
+#ggsave("MN_markerHeatmap.png", width = 2.5, height = 3.5, units = c("in"), dpi = 300)
+```
+
+```{r}
+#9 is ptprh, cdh23, pcdh11x, cdh9, syt6, b3glct
+#12 is pcdh19, nxph1, chd7, syt6, phactr2, znf385d, fgd5chrna7
+#15 is sall2, dnah7 cfap210, iqca1, rfx4, daw1
+#lep is lep, lepr, aff1, abcb1, lima1, pdlim1, cyp3a4.2, fosl1
+#prdm14 is scn5a, adarb2, prdm14, prdm1, nr5a2, 
+
+# Special little genes
+FeaturePlot(MNs, features = c("prdm16", "ptprm", "cyp3a4.2", "kctd8", "lep", "adarb2", "gbx2", "kctd8",  "unc5c", "pcdh11x", "pcdh19", "runx1t1", "phactr2", "lep", "lhx3"))
+
+FeaturePlot_scCustom(MNs, reduction = "umap", pt.size = 0.5, colors_use = viridis_light_high, features = c("cdx4", "cdh4", "cdh6", "cdh7", "cdh8", "cdh9", "cdh10", "cdh12", "cdh13", "cdh14", "cdh18", "cdh20", "cdh21", "cdh22", "cdh23", "cdh24", "cdh25", "cdh26"))
+
+cdhs <- c("cdx4", "cdh4", "cdh6", "cdh7", "cdh8", "cdh9", "cdh10", "cdh12", "cdh13", "cdh14", "cdh18", "cdh20", "cdh21", "cdh22", "cdh23", "cdh24", "cdh25", "cdh26")
+```

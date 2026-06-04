@@ -1,0 +1,218 @@
+---
+title: "Motor_Neurons"
+output: html_document
+date: "2025-08-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(Seurat)
+library(scCustomize)
+```
+
+Subset dataset and run processing on Interneurons
+```{r}
+neural <- LoadSeuratRds(file = "neural_final.rds")
+INs <- subset(x = neural, subset = (neural@meta.data$neural_cell_types == "Glutamatergic Interneurons" | 
+             neural@meta.data$neural_cell_types == "GABA/Glycinergic Interneurons" | 
+             neural@meta.data$neural_cell_types == "Kolmer-Agduhr Interneurons" | 
+              neural@meta.data$neural_cell_types == "vsx2+ Interneurons" |
+               neural@meta.data$neural_cell_types == "Differentiating Interneurons"))
+
+# Normalize, etc REGRESS OUT SAMPLE AND NFEAT_RNA
+INs <- NormalizeData(INs)
+INs <- ScaleData(INs, vars.to.regress = c("Sample", "nFeature_RNA"))
+INs <- FindVariableFeatures(INs, selection.method = "vst", nfeatures = 2000)
+INs <- RunPCA(INs, features = VariableFeatures(object = INs))
+INs <- FindNeighbors(INs, dims=1:50, reduction = "integrated.rpca")
+INs <- FindClusters(INs, resolution = 4, reduction.type = "integrated.rpca")
+INs <- RunUMAP(INs, dims = 1:50, reduction = "integrated.rpca")
+
+# Look at basic parameters
+DimPlot(INs, reduction = "umap", group.by = "neural_cell_types")
+DimPlot(INs, reduction = "umap", group.by = "neural_cell_types", split.by = "Condition")
+DimPlot(INs, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+
+# Re load
+INs <- LoadSeuratRds(file = "INs.rds")
+#neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+Looking at some markers to identify cardinal neuron types
+```{r}
+# dI6
+FeaturePlot(INs, features = c("lhx1", "dmrt3", "lbx1", "dbx2"))
+
+# V0
+FeaturePlot(INs, features = c("evx1", "lhx1", "nrn1", "dbx1", "cbln2"))
+
+# V1
+FeaturePlot(INs, features = c("pax2", "lhx1", "pnoc", "sp9", "foxd3", "en1", "gbx2", "otp"))
+
+# KA' 
+FeaturePlot(INs, features = c("pkd1l2", "th", "tal1", "foxa2", "nkx6-2", "ptchd", "chgb", "sox1"))
+
+# KA''
+FeaturePlot(INs, features = c("pkd1l2", "cdx4", "cfap210", "sall2", "daw1", "tal1", "sox1", "kctd8"))
+
+# V2A
+FeaturePlot(INs, features = c("vsx2", "nrn1", "nkx6-2", "lhx3", "sox21", "sox14", "prdm8", "chat"))
+
+# V2B
+FeaturePlot(INs, features = c("gata2", "gata3" ,"lhx1", "sox1", "tal1", "slc6a5"))
+
+# mystery clusters
+FeaturePlot(INs, features = c("megf11", "pax2", "foxp2", "slc6a5"))
+FeaturePlot(INs, features = c("sim1"))
+
+```
+
+Labelling clusters
+```{r}
+DimPlot(INs, group.by = "seurat_clusters")
+
+INs@meta.data$INs_names <- as.character(INs@meta.data$seurat_clusters)
+INs@meta.data$INs_names =
+  dplyr::recode(INs@meta.data$INs_names,
+                "0" = "dI6 Glycinergic Interneurons",
+                "1" = "V0 Glutamatergic Interneurons",
+                "2" = "V0 Glutamatergic Interneurons",
+                "3" = "V1 GABAergic/Glycinergic Interneurons",
+                "4" = "V2a/b Glutamatergic/Cholinergic Interneurons",
+                "5" = "V0 Glutamatergic Interneurons",
+                "6" = "KA'' GABAergic Interneurons",
+                "7" = "Differentiating Interneurons",
+                "8" = "Intermediate KA Interneurons",
+                "9" = "Differentiating Interneurons",
+                "10" = "KA'' GABAergic Interneurons",
+                "11" = "V2b/s GABAergic/Glycinergic Interneurons",
+                "12" = "V0 Glutamatergic Interneurons",
+                "13" = "Differentiating Interneurons",
+                "14" = "KA' GABAergic/Dopaminergic Interneurons",
+                "15" = "KA'' GABAergic Interneurons",
+                "16" = "V0 Glutamatergic Interneurons",
+                "17" = "V0 Glutamatergic Interneurons",
+                "18" = "V2a Glutamatergic/Cholinergic Interneurons",
+                "19" = "KA'' GABAergic Interneurons",
+                "20" = "unknown Glycinergic Interneurons",
+                "21" = "Differentiating Interneurons",
+                "22" = "V2b GABAergic/Glycinergic Interneurons",
+                "23" = "V0 Glutamatergic Interneurons")
+
+INs@meta.data$INs_names <- factor(INs@meta.data$INs_names, levels = c(
+                "Differentiating Interneurons",
+                "V0 Glutamatergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons",
+                "unknown Glycinergic Interneurons",
+                "dI6 Glycinergic Interneurons",
+                "V2a Glutamatergic/Cholinergic Interneurons",
+                "V2b GABAergic/Glycinergic Interneurons",
+                "KA'' GABAergic Interneurons",
+                "Intermediate KA Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons"))
+
+DimPlot(INs, group.by = "INs_names")
+DimPlot(INs, group.by = "INs_names", split.by = "Sample")
+```
+
+Some of the mystery cells between dI6 and V1 won't cluster, so let's select them instead
+```{r}
+unique(INs@meta.data$INs_names)
+barcodes <- xSelectCells::xSelectCells(INs)
+INs$cells_of_interest <- ifelse(rownames(INs@meta.data) %in% barcodes, "yes", "not")
+INs@meta.data <- INs@meta.data %>% mutate(info=paste(INs_names, cells_of_interest, sep = "_"))
+INs@meta.data$INs_names =
+  dplyr::recode(INs@meta.data$info,
+                "KA'' GABAergic Interneurons_not" = "KA'' GABAergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons_not" = "V1 GABAergic/Glycinergic Interneurons",
+                "V0 Glutamatergic Interneurons_not" = "V0 Glutamatergic Interneurons",
+                "V2a Glutamatergic/Cholinergic Interneurons_not" = "V2a Glutamatergic/Cholinergic Interneurons",
+                "dI6 Glycinergic Interneurons_not" = "dI6 Glycinergic Interneurons",
+                "V2b GABAergic/Glycinergic Interneurons_not" = "V2b GABAergic/Glycinergic Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons_not" = "KA' GABAergic/Dopaminergic Interneurons",
+                "Intermediate KA Interneurons_not" = "Intermediate KA Interneurons",
+                "unknown Glycinergic Interneurons_not" = "unknown Glycinergic Interneurons",
+                "unknown Glycinergic Interneurons_yes" = "unknown Glycinergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons_yes" = "unknown Glycinergic Interneurons",
+                "dI6 Glycinergic Interneurons_yes" = "unknown Glycinergic Interneurons",
+                "Differentiating Interneurons_not" = "Differentiating Interneurons")
+
+unique(INs@meta.data$INs_names)
+DimPlot(INs, group.by = "INs_names")
+
+INs@meta.data$INs_names <- factor(INs@meta.data$INs_names, levels = c(
+                "Differentiating Interneurons",
+                "dI6 Glycinergic Interneurons",
+                "Regenerating V0 Glutamatergic Interneurons",
+                "V0 Glutamatergic Interneurons",
+                "V1 GABAergic/Glycinergic Interneurons",
+                "V2a Glutamatergic/Cholinergic Interneurons",
+                "Regenerating V2a Glutamatergic/Cholinergic Interneurons",
+                "V2b GABAergic/Glycinergic Interneurons",
+                "KA' GABAergic/Dopaminergic Interneurons",
+                "KA'' GABAergic Interneurons",
+                "Intermediate KA Interneurons",
+                "unknown Glycinergic Interneurons"))
+
+saveRDS(INs, file = "INs.rds")
+```
+
+Double check markers
+```{r}
+markers <- FindAllMarkers(INs, only.pos = TRUE, group.by = "INs_names")
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 3) %>%
+    ungroup() -> top3
+```
+
+Figures 2D, E
+```{r}
+INspalette <- c("KA'' GABAergic Interneurons" = "steelblue1",
+                "Differentiating Interneurons" = "grey",
+                "V1 GABAergic/Glycinergic Interneurons" = "mediumturquoise",
+                "V0 Glutamatergic Interneurons" = "coral1",
+                "Regenerating V0 Glutamatergic Interneurons" = "coral1",
+                "dI6 Glycinergic Interneurons" = "#FFD62B",
+                "V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+                "Regenerating V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+                "V2b GABAergic/Glycinergic Interneurons" = "olivedrab3",
+                "KA' GABAergic/Dopaminergic Interneurons" = "dodgerblue4",
+                "Intermediate KA Interneurons" = "dodgerblue3",
+                "unknown Glycinergic Interneurons" = "sienna")
+
+# make a heatmap for markers
+DoHeatmap(INs, features = top3$gene, group.by = "INs_names", group.colors = INspalette, size = 3, draw.lines = FALSE) + scale_fill_gradientn(colors = c("grey", "white", "navyblue")) + theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in"), legend.position="none")
+ggsave("2D.png", width = 4.5, height = 4.5, units = c("in"), dpi = 300)
+
+# make a umap
+DimPlot(INs, group.by = "INs_names", label = FALSE, label.size = 3, repel = TRUE, cols = INspalette, alpha = 1) +   theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.line = element_blank(), axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-8, 9)) + scale_x_continuous(limits = c(-17, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -17, xend = -17 + c(3, 0),
+            y = -8, yend = -8 + c(0, 3),
+           arrow = arrow(type = "closed", length = unit(10, 'pt')))
+
+ggsave("2E.png", width = 5.5, height = 3.5, units = c("in"), dpi = 300)
+```
+
+#Figure 2F KA neurons
+```{r}
+KAs <- subset(x = INs, subset = (INs@meta.data$INs_names == "KA'' GABAergic Interneurons" | 
+                                   INs@meta.data$INs_names == "KA' GABAergic/Dopaminergic Interneurons" | 
+                                   INs@meta.data$INs_names == "Intermediate KA Interneurons"))
+DotPlot_scCustom(KAs, 
+                 features = c("gad2", "pkd1l2", "tal1", "nkx6-2", "foxa2", "ptchd", "th", "slc6a2", "slc6a4", "tph2", "slc6a3"), 
+                 group.by = "INs_names",
+                 colors_use = viridis_light_high) +
+  coord_flip()
+
+ggsave("2F.png", width = 3.5, height = 3.5, units = c("in"), dpi = 300)
+```
