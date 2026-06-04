@@ -1,0 +1,184 @@
+---
+title: "saraswathy_neurons"
+output: html_document
+date: "2026-02-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Libraries
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(readr)
+```
+
+Load datasets and visualize
+```{r}
+# saraswathy dataset
+saraswathy_Neurons <- LoadSeuratRds(file = "saraswathy_Neurons.rds")
+DimPlot(saraswathy_Neurons, group.by = "seurat_clusters", label = TRUE)
+```
+
+Visualize markers from my paper and saraswathy paper
+```{r}
+# catecholinergic
+FeaturePlot(saraswathy_Neurons, features = c("slc6a2"))
+
+# serotonergic
+FeaturePlot(saraswathy_Neurons, features = c("tph2", "slc6a4a"))
+
+# dopaminergic
+FeaturePlot(saraswathy_Neurons, features = c("slc6a3"))
+
+# Cholinergic Motor Neurons - 8, 22
+FeaturePlot(saraswathy_Neurons, features = c("chata", "slc5a7a", "mmp17a"))
+
+# Cholinergic vsx2+ Neurons - small cluster within 2
+FeaturePlot(saraswathy_Neurons, features = c("chata", "slc5a7a", "vsx2"))
+
+# GABA/Glycinergic
+FeaturePlot(saraswathy_Neurons, features = c("gad2", "gad1b", "gad1a", "slc6a5"))
+
+# Glutamatergic
+FeaturePlot(saraswathy_Neurons, features = c("slc17a6b", "slc17a6a"))
+
+# RBNs?
+FeaturePlot(saraswathy_Neurons, features = c("ppp1r1c", "isl2a", "isl2b"), pt.size = 1)
+
+# dI6
+FeaturePlot(saraswathy_Neurons, features = c("lbx1a"), pt.size = 1)
+
+# V2b
+FeaturePlot(saraswathy_Neurons, features = c("pth1ra"), pt.size = 1)
+
+# V0
+FeaturePlot(saraswathy_Neurons, features = c("klhl4", "elfn1a", "elfn1b"), pt.size = 1)
+
+# V1
+FeaturePlot(saraswathy_Neurons, features = c("en1b", "fstl4", "hmx3a"), pt.size = 1, alpha = 0.5)
+
+# other genes of interest
+FeaturePlot(saraswathy_Neurons, features = c("gata3", "pax2a", "pax2b", "foxp2", "megf11", "lhx1a", "pnocb", "lbx1a"), pt.size = 1, alpha = 0.5)
+
+# Neurons
+FeaturePlot(saraswathy_Neurons, features = c("elavl3", "TENM2", "snap25a", "ncam2"))
+
+# Glia/ERGs
+FeaturePlot(saraswathy_Neurons, features = c("gfap", "pkd1b", "cfap57", "slc4a10a"))
+
+# OPCs
+FeaturePlot(saraswathy_Neurons, features = c("cspg4", "dscamb", "sema5a", "traf4a"))
+
+# Oligos A
+FeaturePlot(saraswathy_Neurons, features = c("mpz", "mbpa", "sc44a1b", "mag"))
+
+# Oligos B
+FeaturePlot(saraswathy_Neurons, features = c("scn4ab", "gfra1a", "cntn1a", "ndnf"))
+
+# Leukocytes A
+FeaturePlot(saraswathy_Neurons, features = c("lgals9l1", "ptprc", "cd74a", "csf1ra"))
+
+# Leukocytes B
+FeaturePlot(saraswathy_Neurons, features = c("si:dkey-241l7.2", "si:dkey-241l7.4"))
+
+# Erythrocytes
+FeaturePlot(saraswathy_Neurons, features = c("lyz", "hbba1"))
+
+# iNeurons - clearly cluster 28
+FeaturePlot(saraswathy_Neurons, features = c("atf3", "vamp4", "syt11b", "gap43", "sox11b", "mthfd1l"), pt.size = 1)
+
+# regenerating neurons in xenopus
+FeaturePlot(saraswathy_Neurons, features = c("lepr"), pt.size = 1)
+DimPlot(saraswathy_Neurons, group.by = "Sample", pt.size = 1)
+DimPlot(saraswathy_Neurons, split.by = "Sample", pt.size = 1)
+
+DimPlot(saraswathy_Neurons, group.by = "seurat_clusters", pt.size = 1, label = TRUE)
+DotPlot(saraswathy_Neurons, group.by = "seurat_clusters", features = c("atf3", "lepr", "gap43", "rtn4rl1a"))
+```
+
+Find Markers
+```{r}
+# markers from AAS paper
+AAS_markers <- FindAllMarkers(neural, only.pos = TRUE, group.by = "regenerating_names")
+AAS_markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 20) %>%
+    ungroup() -> AAStop10
+FeaturePlot(neural, features = (AAStop10[which(AAStop10$cluster == "atf3+ Regenerating Neurons"),] )$gene)
+
+# visualize these markers in saraswathy dataset
+FeaturePlot(saraswathy_Neurons, features = (AAStop10[which(AAStop10$cluster == "atf3+ Regenerating Neurons"),] )$gene)
+FeaturePlot(saraswathy_Neurons, features = c("lepr", "lepa", "kcnk10a", "kcnk10b"))
+
+#DotPlot(neural, group.by = "regenerating_names", features = (top10[which(top10$cluster == "atf3+ Regenerating Neurons"),] )$gene)
+
+# Saraswathy paper
+    # I want more cluster resolution
+saraswathy_Neurons <- FindClusters(saraswathy_Neurons, resolution = 1)
+saraswathy_Neurons[["RNA"]] <- JoinLayers(saraswathy_Neurons[["RNA"]])
+
+# find markers in saraswathy dataset
+saraswathy_markers <- FindAllMarkers(saraswathy_Neurons, only.pos = TRUE, group.by = "seurat_clusters")
+saraswathy_markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 20) %>%
+    ungroup() -> sara_top10
+FeaturePlot(saraswathy_Neurons, features = (sara_top10[which(sara_top10$cluster == "28"),] )$gene)
+
+```
+
+```{r}
+DimPlot(saraswathy_Neurons, group.by = "seurat_clusters", label = TRUE)
+
+# visualize AAS markers in saraswathy
+DotPlot(saraswathy_Neurons, group.by = "seurat_clusters", features = c("atf3", "lepr", "gap43", "rtn4rl1a"))
+
+# visualize Saraswathy markers in AAS
+DotPlot(neural, group.by = "regenerating_names", features = c("gap43", "prph", "atf3", "mthfd1l", "flnc", "uap1", "dnm3", "afap1l1", "flna", "kif26b", "sox11"))
+
+DotPlot(saraswathy_Neurons, group.by = "seurat_clusters", features = c("lepr", "lepa", "lepb", "nkain2", "alkal1", "stx3a", "gpc6a", "gpc6b"))
+```
+
+Make Figure 6 figures
+```{r}
+# Looking for markers...
+neural.markers <- FindAllMarkers(saraswathy_Neurons, only.pos = TRUE, group.by = "seurat_clusters")
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 30) %>%
+    ungroup() -> top10
+
+genes <- top10[which(top10$cluster == "28" | top10$cluster == "37"),]
+subset1 <- subset(saraswathy_Neurons, saraswathy_Neurons@meta.data$seurat_clusters == "37" | saraswathy_Neurons@meta.data$seurat_clusters == "37")
+
+# make heatmap showing top 30 genes for clusters 28 and 37
+DoHeatmap(subset1, 
+          features = genes$gene, 
+          group.by = "seurat_clusters", 
+          size = 2, 
+          draw.lines = FALSE) + 
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue")) + 
+  theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in"))
+
+# look at lepr expression over saraswathy dataset
+FeaturePlot(saraswathy_Neurons, features = c("lepr"), pt.size = 1)
+
+DotPlot(saraswathy_Neurons, 
+          features = c("lepr"),
+          group.by = "Sample") + 
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue")) + 
+  theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in")) +
+  coord_flip()
+
+
+ggsave("S6B.png", width = 6, height = 3, units = c("in"), dpi = 300)
+ggsave("S6D.png", width = 10, height = 5, units = c("in"), dpi = 300)
+```

@@ -1,0 +1,666 @@
+---
+title: "Figure 6"
+output: html_document
+date: "2025-10-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rstatix)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(GO.db)
+library(Seurat)
+library(scCustomize)
+library(circlize)
+library(ggplot2)
+library(readr)
+library(clusterProfiler)
+library(tidyverse)
+
+
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+Final Regen sorting - Don't need to do if you have final rds file
+```{r}
+neural$regenerating_names <- neural$final_names
+neural@meta.data$regenerating_names <- dplyr::recode(neural@meta.data$regenerating_names,
+            "Neural Progenitor Cells" = "Neural Progenitor Cells",
+             "Differentiating Motor Neurons" = "Differentiating Neurons",
+             "prdm14- Motor Neurons" = "Neurons",
+             "prdm14+ Motor Neurons" = "Neurons",
+             "Roof Plate" = "Neural Progenitor Cells",
+             "Differentiating Interneurons" = "Differentiating Neurons",
+             "Floor Plate" = "Neural Progenitor Cells",
+             "Rohon Beard Neurons" = "Neurons",
+             "KA'' GABAergic Interneurons" = "Neurons",
+              "V1 GABAergic/Glycinergic Interneurons" = "Neurons",
+              "V0 Glutamatergic Interneurons" = "Neurons",
+              "dI6 Glycinergic Interneurons" = "Neurons",
+              "V2a Glutamatergic/Cholinergic Interneurons" = "Neurons",
+              "V2b GABAergic/Glycinergic Interneurons" = "Neurons",
+              "KA' GABAergic/Dopaminergic Interneurons" = "Neurons",
+              "Intermediate KA Interneurons" = "Neurons",
+              "unknown Glycinergic Interneurons" = "Neurons",
+              "Regenerating V0 Glutamatergic Interneurons" = "atf3- Regenerating Neurons",
+              "Regenerating prdm14- Motor Neurons" = "atf3+ Regenerating Neurons",
+              "Regenerating V2a Glutamatergic/Cholinergic Interneurons" = "atf3+ Regenerating Neurons",
+              "Regenerating prdm14+ Motor Neurons" = "atf3+ Regenerating Neurons",
+              "Regenerating Rohon Beard Neurons" = "atf3- Regenerating Neurons")
+
+unique(neural@meta.data$regenerating_names)
+
+DimPlot(neural, group.by = "regenerating_names")
+saveRDS(neural, file = "neural_final.rds")
+```
+
+FIGURE 6A SAMPLE UMAP
+```{r}
+palette <- c("#21124E", "#4C117B", "#842682", "#942C80", "#A5317E", "#C63D73", "#ED5960", "#FC8A61")
+
+DimPlot_scCustom(neural, 
+            reduction = "umap", 
+            pt.size = 0.5, 
+            group.by = "Sample",
+            colors_use = palette) +
+  theme(axis.ticks = element_blank(), 
+        axis.text = element_blank(), 
+        plot.title = element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-12, 7)) + 
+  scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(5, 0),
+            y = -12, yend = -12 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(4, 'pt')))
+
+ggsave("6A.png", width = 5, height = 5, units = c("in"), dpi = 300)
+```
+
+Figure 6B sample UMAP
+```{r}
+palette = c("Neural Progenitor Cells" = "lightgrey",
+             "Differentiating Motor Neurons" = "lightgrey",
+             "Roof Plate" = "lightgrey",
+             "Differentiating Interneurons" = "lightgrey",
+             "Floor Plate" = "lightgrey",
+             "Rohon Beard Neurons" = "#E5AA70",
+             "KA'' GABAergic Interneurons" = "steelblue1",
+              "V1 GABAergic/Glycinergic Interneurons" = "mediumturquoise",
+              "V0 Glutamatergic Interneurons" = "coral1",
+              "dI6 Glycinergic Interneurons" = "goldenrod1",
+              "V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+              "V2b GABAergic/Glycinergic Interneurons" = "olivedrab3",
+              "KA' GABAergic/Dopaminergic Interneurons" = "dodgerblue4",
+              "Intermediate KA Interneurons" = "dodgerblue3",
+              "unknown Glycinergic Interneurons" = "brown",
+              "prdm14- Motor Neurons" = "magenta2",
+              "prdm14+ Motor Neurons" = "#9D129F",
+              "Regenerating V0 Glutamatergic Interneurons" = "black",
+              "Regenerating prdm14- Motor Neurons" = "black",
+              "Regenerating V2a Glutamatergic/Cholinergic Interneurons" = "black",
+              "Regenerating prdm14+ Motor Neurons" = "black",
+              "Regenerating Rohon Beard Neurons" = "black")
+
+
+DimPlot(neural, 
+            reduction = "umap", 
+            pt.size = 0.1, 
+            group.by = "final_names",
+            cols = palette) +
+  theme(axis.ticks = element_blank(), 
+        axis.text = element_blank(), 
+        plot.title = element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-12, 7)) + 
+  scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(5, 0),
+            y = -12, yend = -12 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(4, 'pt')))
+
+ggsave("6B.png", width = 5, height = 5, units = c("in"), dpi = 300)
+```
+
+# Figure 6B plots
+```{r}
+unique(neural$regenerating_names)
+new <- neural[[]] %>% group_by(regenerating_names, whole_names, Sample, Condition2, Age) %>% summarize(n())
+neural[[]] %>% group_by(Sample) %>% summarize(n())
+new$Percentage <- new$Sample
+new$Percentage <- dplyr::recode(new$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+new$Percentage <- new$`n()` / new$Percentage
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+new$prettyPercentage <- specify_decimal((new$Percentage*100), 3)
+
+
+new
+new[145, 1:5] = as.list(c("Neurons", "Rohn Beard Neurons", "7dpa", "Regenerating", "10dpf"))
+new[145, 6] = as.integer(0)
+new[145, 7] = as.double(0)
+new[145, 8] = as.character(0.00)
+
+new[146, 1:5] = as.list(c("Neurons", "Rohon Beard Neurons", "un7dpa", "Uninjured", "10dpf"))
+new[146, 6] = as.integer(0)
+new[146, 7] = as.double(0)
+new[146, 8] = as.character(0.00)
+
+selected <- subset(x = new, subset = new$whole_names == "Rohon Beard Neurons")
+palette3 <- c("Neurons" = "#E5AA70", "atf3- Regenerating Neurons" = "black")
+selected$regenerating_names <- factor(selected$regenerating_names, levels = c("Neurons", "atf3- Regenerating Neurons"))
+
+ggplot(selected, aes(x = Age, y = Percentage, fill = regenerating_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=0.5)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right") 
+  
+ggsave("6B_RBN_regen.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+selected <- subset(x = new, subset = new$whole_names == "V2a Glutamatergic/Cholinergic Interneurons")
+palette3 <- c("Neurons" = "palevioletred1", "atf3+ Regenerating Neurons" = "black")
+selected$regenerating_names <- factor(selected$regenerating_names, levels = c("Neurons", "atf3+ Regenerating Neurons"))
+
+ggplot(selected, aes(x = Age, y = Percentage, fill = regenerating_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=0.5)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right") 
+  
+ggsave("6B_V2a_regen.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+selected <- subset(x = new, subset = new$whole_names == "prdm14- Motor Neurons")
+palette3 <- c("Neurons" = "magenta2", "atf3+ Regenerating Neurons" = "black")
+selected$regenerating_names <- factor(selected$regenerating_names, levels = c("Neurons", "atf3+ Regenerating Neurons"))
+
+ggplot(selected, aes(x = Age, y = Percentage, fill = regenerating_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=0.5)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right") 
+  
+ggsave("6B_prdm14-MNs_regen.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+selected <- subset(x = new, subset = new$whole_names == "prdm14+ Motor Neurons")
+palette3 <- c("Neurons" = "#9D129F", "atf3+ Regenerating Neurons" = "black")
+selected$regenerating_names <- factor(selected$regenerating_names, levels = c("Neurons", "atf3+ Regenerating Neurons"))
+
+ggplot(selected, aes(x = Age, y = Percentage, fill = regenerating_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=0.5)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right") 
+  
+ggsave("6B_prdm14+MNs_regen.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+selected <- subset(x = new, subset = new$whole_names == "V0 Glutamatergic Interneurons")
+palette3 <- c("Neurons" = "coral1", "atf3- Regenerating Neurons" = "black")
+selected$regenerating_names <- factor(selected$regenerating_names, levels = c("Neurons", "atf3- Regenerating Neurons"))
+
+ggplot(selected, aes(x = Age, y = Percentage, fill = regenerating_names)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = palette3) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=0.5)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right") 
+  
+ggsave("6B_V0_regen.png", width = 1, height = 2, units = c("in"), dpi = 300)
+```
+
+# Figure 6C
+```{r}
+neural$regenerating_names2 <- neural$final_names
+neural@meta.data$regenerating_names2 <- dplyr::recode(neural@meta.data$regenerating_names2,
+            "Neural Progenitor Cells" = "Neural Progenitor Cells",
+             "Differentiating Motor Neurons" = "Differentiating Neurons",
+             "prdm14- Motor Neurons" = "prdm14- MNeurons",
+             "prdm14+ Motor Neurons" = "prdm14+ MNeurons",
+             "Roof Plate" = "Neural Progenitor Cells",
+             "Differentiating Interneurons" = "Differentiating Neurons",
+             "Floor Plate" = "Neural Progenitor Cells",
+             "Rohon Beard Neurons" = "RB Neurons",
+             "KA'' GABAergic Interneurons" = "Neurons",
+              "V1 GABAergic/Glycinergic Interneurons" = "Neurons",
+              "V0 Glutamatergic Interneurons" = "V0 Neurons",
+              "dI6 Glycinergic Interneurons" = "Neurons",
+              "V2a Glutamatergic/Cholinergic Interneurons" = "V2a Neurons",
+              "V2b GABAergic/Glycinergic Interneurons" = "Neurons",
+              "KA' GABAergic/Dopaminergic Interneurons" = "Neurons",
+              "Intermediate KA Interneurons" = "Neurons",
+              "unknown Glycinergic Interneurons" = "Neurons",
+              "Regenerating V0 Glutamatergic Interneurons" = "atf3- Regenerating V0 Neurons",
+              "Regenerating prdm14- Motor Neurons" = "atf3+ Regenerating prdm14- M Neurons",
+              "Regenerating V2a Glutamatergic/Cholinergic Interneurons" = "atf3+ Regenerating V2a Neurons",
+              "Regenerating prdm14+ Motor Neurons" = "atf3+ Regenerating prdm14+ M Neurons",
+              "Regenerating Rohon Beard Neurons" = "atf3- Regenerating RB Neurons")
+
+neural@meta.data$regenerating_names2 = factor(neural@meta.data$regenerating_names2, levels = 
+                                                c("Neural Progenitor Cells", 
+                                                  "Differentiating Neurons", 
+                                                  "Neurons", 
+                                                  "V2a Neurons", 
+                                                  "atf3+ Regenerating V2a Neurons", 
+                                                  "prdm14- MNeurons", 
+                                                  "atf3+ Regenerating prdm14- M Neurons", 
+                                                  "prdm14+ MNeurons", 
+                                                  "atf3+ Regenerating prdm14+ M Neurons", 
+                                                  "V0 Neurons", 
+                                                  "atf3- Regenerating V0 Neurons", 
+                                                  "RB Neurons", 
+                                                  "atf3- Regenerating RB Neurons"))
+DotPlot(neural, 
+        group.by = "regenerating_names2", 
+        features = c("ppp1r17", "rtn4rl1", "sfrp4", "lep", "lepr", "gap43", "atf3"),
+        cols = c("#21124E", "#ED5960")) + 
+  coord_flip()
+
+#ggsave("6C.png", width = 7.5, height = 4, units = c("in"), dpi = 300)
+```
+
+#S6A
+```{r}
+neural@meta.data
+
+# Looking for markers...
+neural.markers <- FindAllMarkers(neural, only.pos = TRUE, group.by = "regenerating_names")
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 15) %>%
+    ungroup() -> top10
+
+subset1 <- subset(neural, neural@meta.data$regenerating_names == "atf3- Regenerating Neurons" | neural@meta.data$regenerating_names == "atf3+ Regenerating Neurons" )
+
+DoHeatmap(subset1, 
+          features = top10$gene, 
+          group.by = "regenerating_names", 
+          size = 2, 
+          draw.lines = FALSE) + 
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue")) + 
+  theme(text=element_text(size=7), plot.margin = margin(0.5, 0.75, 0, 0, "in"))
+
+#ggsave("S6A.png", width = 5, height = 5, units = c("in"), dpi = 300)
+```
+
+# MUST RUN FOR ALL FOLLOWING CODE 
+This sets up the GO annotation database downloaded from QuickGO website
+```{r}
+f <- function(x, pos) dplyr::select(x, X3, X5)
+go_ids <- read_tsv_chunked("QuickGO-annotations-1750272346286-20250618.gaf", callback = DataFrameCallback$new(f), col_names = FALSE)
+colnames(go_ids) <- c("gene", "GOID")
+
+df <- AnnotationDbi::select(GO.db, columns=c("GOID","TERM", "ONTOLOGY"), keys = c("BP", "CC", "MF"), keytype="ONTOLOGY")
+go_ids <- left_join(go_ids, df, join_by("GOID"))
+go_ids <- go_ids %>% filter(!is.na(TERM))
+go_ids <- unique.data.frame(go_ids)
+```
+
+Creates table of all differentially expressed genes between matched timepoints in regenerating and uninjured conditions in neuronal cell states (regenerating names!)
+```{r}
+neural$sample.state <- paste(neural$Sample, neural$regenerating_names, sep = "_")
+neural$sample.state <- factor(neural$sample.state)
+Idents(neural) <- "sample.state"
+sample.states <- levels(neural$sample.state)
+de_genes <- data.frame(gene = c(), log2FC = c())
+index <- 1
+sample.states[1]
+sample.states
+
+for (i in 1:18) {
+  neural.de <- FindMarkers(object = neural,
+                         ident.1 = sample.states[index],
+                         ident.2 = sample.states[index+12], 
+                         verbose = FALSE, min.pct = 0.3, 
+                         min.cells.group = 0, assay = "RNA")
+  genes <- data.frame(rownames(neural.de), neural.de$avg_log2FC)
+  colnames(genes) <- c("gene", "log2FC")
+  genes$direction <- "upregulated"
+  genes$direction[genes$log2FC < 0] <- "downregulated"
+  genes$Age <- paste0(substring(sample.states[index], 1, 1), "dpa")
+  genes$cell_type <- substring(sample.states[index], 6, nchar(sample.states[index]))
+  de_genes <- rbind(de_genes, genes)
+  index <- index + 1
+}
+
+```
+
+Performs GO analysis on each sample and identifies upregulated and downregulated terms enriched at each timepoint amongst differentially expressed genes with a fold change >= 1.5 (regenerating names!)
+```{r}
+enrich_genes <- de_genes %>% filter(abs(log2FC) >= log2(1.5))
+formula_res <- compareCluster(gene~direction+Age+cell_type, data=enrich_genes, fun="enricher", TERM2GENE=go_ids[go_ids$ONTOLOGY == "BP", c("TERM", "gene")])
+temp <- data.frame(paste(formula_res@compareClusterResult[["Description"]],formula_res@compareClusterResult[["Cluster"]]), formula_res@compareClusterResult[["geneID"]])
+colnames(temp) <- c("Description", "geneID")
+temp$geneID <- strsplit(temp$geneID, "/")
+temp1 <- as.list(temp$geneID)
+names(temp1) <- temp$Description
+temp1 <- stack(temp1)
+temp1$Age <- str_extract(temp1$ind, ".dpa")
+temp1
+temp1$cell_type <- str_extract(temp1$ind, "Neurons|Differentiating Neurons|Neural Progenitor Cells|atf3+ Regenerating Neurons|atf3- Regenerating Neurons")
+temp1 <- left_join(temp1, de_genes %>% dplyr::select(gene, log2FC, Age, cell_type), by = join_by(values == gene, Age == Age, cell_type == cell_type))
+temp <- temp1 %>% dplyr::group_by(ind) %>% summarize(avglog2FC = mean(log2FC))
+enriched_go <- data.frame(formula_res)
+enriched_go <- mutate(enriched_go, avglog2foldChange = temp$avglog2FC)
+go_id_map <- data.frame(go_ids$GOID, go_ids$TERM)
+go_id_map <- unique.data.frame(go_id_map)
+enriched_go$ID <- plyr::mapvalues(enriched_go$ID,go_id_map$go_ids.TERM,go_id_map$go_ids.GOID,warn_missing = F)
+```
+
+INDIVIDUAL GO TERMS AT 1DPA # Figure 6F - 1 DPA ONLY
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("axon guidance")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+neural@meta.data$regenerating_names = factor(neural@meta.data$regenerating_names, levels = c("Neural Progenitor Cells", "Differentiating Neurons", "Neurons", "atf3- Regenerating Neurons", "atf3+ Regenerating Neurons"))
+
+palette = c("Neurons" = "white", "Differentiating Neurons" = "white", "Neural Progenitor Cells" = "white", "atf3- Regenerating Neurons" = "grey14", "atf3+ Regenerating Neurons" = "grey14")
+palette2 = c("Uninjured" = "black", "Regenerating" = "black")
+
+ggplot(neural@meta.data[which(neural@meta.data$Age == "4dpf"),], aes(x = regenerating_names, y = interest1, color = Condition, fill = regenerating_names)) + 
+  geom_boxplot(outliers = FALSE) + 
+  scale_fill_manual(values = palette) +
+  scale_color_manual(values = palette2) +
+  theme(panel.background = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.text.y = element_text(color = "black")) +
+  NoLegend()
+
+#ggsave("6E.png", width = 2, height = 3, units = c("in"), dpi = 300)
+```
+
+STATS at 1DPA for Figure 6F
+```{r}
+meta <- neural[[]] %>% dplyr::select(Age, Sample, actual_cell_types, regenerating_names, Condition2, interest1)
+meta <- meta[which(meta$Age == "4dpf"),]
+meta
+
+pairwise_wilcox_test(meta %>%
+    filter(Condition2 == "Regenerating"), interest1~regenerating_names, comparisons = list(c("Neurons", "atf3+ Regenerating Neurons"), c("Neurons", "atf3- Regenerating Neurons")))
+
+pairwise_wilcox_test(meta %>%
+    filter(regenerating_names == "Neural Progenitor Cells"), interest1~Condition2, comparisons = list(c("Uninjured", "Regenerating")))
+pairwise_wilcox_test(meta %>%
+    filter(regenerating_names == "Neurons"), interest1~Condition2, comparisons = list(c("Uninjured", "Regenerating")))
+pairwise_wilcox_test(meta %>%
+    filter(regenerating_names == "Differentiating Neurons"), interest1~Condition2, comparisons = list(c("Uninjured", "Regenerating")))
+```
+
+INDIVIDUAL GO TERMS AT 1DPA, 3dpa, 7dpa # Figure S10D
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("axon guidance")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+neural@meta.data$regenerating_names = factor(neural@meta.data$regenerating_names, levels = c("Neural Progenitor Cells", "Differentiating Neurons", "Neurons", "atf3- Regenerating Neurons", "atf3+ Regenerating Neurons"))
+
+palette = c("Neurons" = "white", "Differentiating Neurons" = "white", "Neural Progenitor Cells" = "white", "atf3- Regenerating Neurons" = "grey14", "atf3+ Regenerating Neurons" = "grey14")
+palette2 = c("Uninjured" = "black", "Regenerating" = "black")
+
+ggplot(neural@meta.data[which(neural@meta.data$Age == "4dpf"),], aes(x = regenerating_names, y = interest1, color = Condition, fill = regenerating_names)) + 
+  geom_boxplot(outliers = FALSE) + 
+  scale_fill_manual(values = palette) +
+  scale_color_manual(values = palette2) +
+  theme(panel.background = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.text.y = element_text(color = "black")) +
+  NoLegend()
+
+ggsave("S7D_4dpf.png", width = 2, height = 3, units = c("in"), dpi = 300)
+
+ggplot(neural@meta.data[which(neural@meta.data$Age == "6dpf"),], aes(x = regenerating_names, y = interest1, color = Condition, fill = regenerating_names)) + 
+  geom_boxplot(outliers = FALSE) + 
+  scale_fill_manual(values = palette) +
+  scale_color_manual(values = palette2) +
+  theme(panel.background = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.text.y = element_text(color = "black")) +
+  NoLegend()
+
+ggsave("S7D_6dpf.png", width = 2, height = 3, units = c("in"), dpi = 300)
+
+ggplot(neural@meta.data[which(neural@meta.data$Age == "10dpf"),], aes(x = regenerating_names, y = interest1, color = Condition, fill = regenerating_names)) + 
+  geom_boxplot(outliers = FALSE) + 
+  scale_fill_manual(values = palette) +
+  scale_color_manual(values = palette2) +
+  theme(panel.background = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.text.y = element_text(color = "black")) +
+  NoLegend()
+
+ggsave("S10D_10dpf.png", width = 2, height = 3, units = c("in"), dpi = 300)
+```
+
+INDIVIDUAL GO TERMS AT 1DPA # Figure S10A
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("intracellular signal transduction")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+neural@meta.data$regenerating_names = factor(neural@meta.data$regenerating_names, levels = c("Neural Progenitor Cells", "Differentiating Neurons", "Neurons", "atf3- Regenerating Neurons", "atf3+ Regenerating Neurons"))
+
+palette = c("Neurons" = "white", "Differentiating Neurons" = "white", "Neural Progenitor Cells" = "white", "atf3- Regenerating Neurons" = "grey14", "atf3+ Regenerating Neurons" = "grey14")
+palette2 = c("Uninjured" = "black", "Regenerating" = "black")
+
+ggplot(neural@meta.data[which(neural@meta.data$Age == "4dpf"),], aes(x = regenerating_names, y = interest1, color = Condition, fill = regenerating_names)) + 
+  geom_boxplot(outliers = FALSE) + 
+  scale_fill_manual(values = palette) +
+  scale_color_manual(values = palette2) +
+  theme(panel.background = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.text.y = element_text(color = "black")) +
+  NoLegend()
+
+ggsave("S10A.png", width = 2, height = 3, units = c("in"), dpi = 300)
+```
+
+# Figure 6E
+```{r}
+write.csv(enriched_go, "6E", row.names=FALSE)
+
+# go into excel and manually make list of GO TERMs of interest (cell-cell adhesion, semaphorin-plexin signaling pathway, nervous system development, and axon guidance) in column 1 and their associated genes, including replicates, in column 2
+```
+```{r}
+palette <- c("#21124E", "#4C117B", "#842682", "#942C80", "#A5317E", "#C63D73", "#ED5960", "#FC8A61")
+
+meta <- read.csv(file = "6F.csv")
+grid.col <- c(
+   "axon guidance" = "#FC8A61", 
+   "nervous system development" = "#ED5960",
+   "semaphorin-plexin signaling pathway" = "#A5317E", 
+   "cell-cell adhesion" = "#4C117B")
+# Create a customized chord diagram
+circos.clear()
+chordDiagram(meta, grid.col = grid.col, annotationTrack = "grid", annotationTrackHeight = c(0.03, 0.001),
+    preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(meta))))))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+}, bg.border = NA) # here set bg.border to NA is important
+```
+
+# Figure S10B
+```{r}
+write.csv(enriched_go, "S10B", row.names=FALSE)
+
+# go into excel and manually make list of GO TERMs of interest (cell-cell adhesion, semaphorin-plexin signaling pathway, nervous system development, and axon guidance) in column 1 and their associated genes, including replicates, in column 2
+```
+```{r}
+meta <- read.csv(file = "S7B.csv")
+grid.col <- c(
+   "intracellular signal transduction" = "#FC8A61",
+   "nervous system development" = "#ED5960",
+   "regulation of intracellular signal transduction" = "#C63D73",
+   "small GTPase-mediated signal transduction" = "#942C80",
+   "transmembrane receptor protein tyrosine kinase signaling pathway" = "#4C117B",
+   "Ras protein signal transduction" = "#21124E")
+# Create a customized chord diagram
+circos.clear()
+chordDiagram(meta, grid.col = grid.col, annotationTrack = "grid", annotationTrackHeight = c(0.03, 0.001),
+    preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(meta))))))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+}, bg.border = NA) # here set bg.border to NA is important
+```
+
+Figure S10C
+```{r}
+write.csv(enriched_go, "S10C", row.names=FALSE)
+
+# go into excel and manually make list of GO TERMs of interest (cell-cell adhesion, semaphorin-plexin signaling pathway, nervous system development, and axon guidance) in column 1 and their associated genes, including replicates, in column 2
+```
+```{r}
+meta <- read.csv(file = "S7C.csv")
+
+# Create a customized chord diagram
+circos.clear()
+chordDiagram(meta, annotationTrack = "grid", annotationTrackHeight = c(0.03, 0.001),
+    preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(meta))))))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))
+}, bg.border = NA) # here set bg.border to NA is important
+```
+
+Figure S7
+```{r}
+
+neural@meta.data
+neural.markers <- FindAllMarkers(neural, only.pos = TRUE, group.by = "regenerating_names2")
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 3) %>%
+    ungroup() -> top3
+
+
+# since some of the genes aren't present in the RNA layer, I have to add them into a "top3" dataset to call them for the heatmap instead
+neural_cell_types <- top3$cluster
+gene <- top3$gene
+myTop3 <- data.frame(neural_cell_types = neural_cell_types, gene = gene)
+myTop3
+top10
+
+myTop3[1, 1:2] = as.list(c("Neural Progenitor Cells", "slc1a3"))
+myTop3[2, 1:2] = as.list(c("Neural Progenitor Cells", "krt8.1"))
+myTop3[3, 1:2] = as.list(c("Neural Progenitor Cells", "zfp36l2"))
+myTop3[13, 1:2] = as.list(c("atf3+ Regenerating V2a Neurons", "ntng1"))
+myTop3[27, 1:2] = as.list(c("atf3+ Regenerating prdm14+ M Neurons", "scn5a"))
+myTop3[26, 1:2] = as.list(c("atf3+ Regenerating prdm14+ M Neurons", "stac"))
+
+
+# Making a marker heatmap for neural_cell_types
+DoHeatmap(neural, features = myTop3$gene, group.by = "regenerating_names2", group.colors = palette, size = 3, draw.lines = FALSE) + 
+  theme(text=element_text(size=7), 
+        plot.margin = margin(0.5, 0.75, 0, 0, "in"), 
+        legend.position="none") +
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue"))
+
+ggsave("S7.png", width = 6.5, height = 4, units = c("in"), dpi = 300)
+```

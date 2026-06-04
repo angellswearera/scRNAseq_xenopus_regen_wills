@@ -1,0 +1,453 @@
+---
+title: "Fig4C,4D"
+output: html_document
+date: "2026-01-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+```
+
+Run both the interneurons and motor neurons rmd and the regeneration_subclusters rmd to format, unless you have the rds files
+```{r}
+neural <- LoadSeuratRds(file = "neural_final.rds")
+INs <- LoadSeuratRds(file = "INs.rds")
+MNs <- LoadSeuratRds(file = "MNs.rds")
+
+FeaturePlot(neural, features= c("ret"))
+```
+
+Putting in the cell type information I've learned from clustering the interneurons and motor neurons separately
+```{r}
+INs@meta.data$final_names <- INs@meta.data$INs_names
+MNs@meta.data$final_names <- MNs@meta.data$MN_names
+neural@meta.data$final_names <- neural@meta.data$neural_cell_types
+
+INs_barcodes <- INs@meta.data[, c(1, 26)]
+neural@meta.data
+for (i in 1:nrow(neural@meta.data)) {
+  if (rownames(neural@meta.data[i,]) %in% rownames(INs_barcodes)) {
+    for (e in 1:nrow(INs_barcodes)) { 
+      if (rownames(neural@meta.data[i,]) == rownames(INs_barcodes[e,])) {
+        neural@meta.data[i,]$final_names <- INs_barcodes[e,]$final_names
+        print("yay")
+      }
+      else {
+        print("nay")
+      }
+      }
+    }
+  else {
+    print("boo")
+    }
+  }
+
+MN_barcodes <- MNs@meta.data[, c(1, 23)]
+options(future.globals.maxSize = 1024^4)
+
+for (i in 1:nrow(neural@meta.data)) {
+  if (rownames(neural@meta.data[i,]) %in% rownames(MN_barcodes)) {
+    for (e in 1:nrow(MN_barcodes)) { 
+      if (rownames(neural@meta.data[i,]) == rownames(MN_barcodes[e,])) {
+        neural@meta.data[i,]$final_names <- MN_barcodes[e,]$final_names
+        print("yay")
+      }
+      else {
+        print("nay")
+      }
+      }
+    }
+  else {
+    print("boo")
+    }
+  }
+
+unique(neural@meta.data$final_names)
+
+# make whole names off of the final names- this is the entire cluster including regeneration specific ones
+neural@meta.data$whole_names <- neural@meta.data$final_names
+neural@meta.data$whole_names <- dplyr::recode(neural@meta.data$final_names,
+                                "Regenerating prdm14- Motor Neurons" = "prdm14- Motor Neurons",
+                                "Regenerating prdm14+ Motor Neurons" = "prdm14+ Motor Neurons",
+                                "Regenerating V0 Glutamatergic Interneurons" = "V0 Glutamatergic Interneurons",
+                                "Regenerating V2a Glutamatergic/Cholinergic Interneurons" = "V2a Glutamatergic/Cholinergic Interneurons",
+                                "Regenerating Rohon Beard Neurons" = "Rohon Beard Neurons")
+```
+
+Final housekeeping
+```{r}
+# I don't like that there are some random MN cells in other clusters- let's pick them out
+barcodes <- xSelectCells::xSelectCells(neural)
+barcodes[[length(barcodes)+1]] <- xSelectCells::xSelectCells(neural)
+neural2 <- subset(neural, !(neural@meta.data$orig.ident %in% barcodes))
+
+# when happy with the selection, rename!
+neural <- neural2
+```
+
+Make figure, double checking the whole name definitions
+```{r}
+palette <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#D6D6D6",
+             "prdm14- Motor Neurons" = "magenta2",
+             "prdm14+ Motor Neurons" = "#9D129F",
+             "Roof Plate" = "#D6D6D6",
+             "Differentiating Interneurons" = "#D6D6D6",
+             "Floor Plate" = "#D6D6D6",
+             "Rohon Beard Neurons" = "#E5AA70",
+             "KA'' GABAergic Interneurons" = "steelblue1",
+                "V1 GABAergic/Glycinergic Interneurons" = "mediumturquoise",
+                "V0 Glutamatergic Interneurons" = "coral1",
+                "dI6 Glycinergic Interneurons" = "goldenrod1",
+                "V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+                "V2b GABAergic/Glycinergic Interneurons" = "olivedrab3",
+                "KA' GABAergic/Dopaminergic Interneurons" = "dodgerblue4",
+                "Intermediate KA Interneurons" = "dodgerblue3",
+                "unknown Glycinergic Interneurons" = "brown")
+
+# make a umap
+DimPlot(neural, group.by = "final_names")
+DimPlot(neural, group.by = "whole_names", label = FALSE, label.size = 3, repel = TRUE, cols = palette) +   theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.line = element_blank(), axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-11, 7)) + scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(10, 'pt')))
+
+neural[[]]
+# clean up and then save
+neural@meta.data <- neural@meta.data[, -which(colnames(neural@meta.data) %in% 'info')]
+neural@meta.data <- neural@meta.data[, -which(colnames(neural@meta.data) %in% 'cells_of_interest')]
+
+#saveRDS(neural, file = "neural_final.rds")
+```
+
+# Pie chart for neuron types looking in neuronal proportion for Figure 4E!
+```{r}
+Neuronpalette <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#D6D6D6",
+             "prdm14- Motor Neurons" = "magenta2",
+             "prdm14+ Motor Neurons" = "#9D129F",
+             "Roof Plate" = "#D6D6D6",
+             "Differentiating Interneurons" = "#D6D6D6",
+             "Floor Plate" = "#D6D6D6",
+             "Rohon Beard Neurons" = "#E5AA70",
+             "KA'' GABAergic Interneurons" = "steelblue1",
+              "V1 GABAergic/Glycinergic Interneurons" = "mediumturquoise",
+              "V0 Glutamatergic Interneurons" = "coral1",
+              "dI6 Glycinergic Interneurons" = "goldenrod1",
+              "V2a Glutamatergic/Cholinergic Interneurons" = "palevioletred1",
+              "V2b GABAergic/Glycinergic Interneurons" = "olivedrab3",
+              "KA' GABAergic/Dopaminergic Interneurons" = "dodgerblue4",
+              "Intermediate KA Interneurons" = "dodgerblue3",
+              "unknown Glycinergic Interneurons" = "brown")
+
+Neurons <- subset(x = neural, subset = neural@meta.data$actual_cell_types == "Neurons")
+Neurons <- subset(x = Neurons, subset = Neurons@meta.data$whole_names != "Differentiating Interneurons")
+Neurons <- subset(x = Neurons, subset = Neurons@meta.data$whole_names != "Differentiating Motor Neurons")
+
+unique(Neurons@meta.data$whole_names)
+Neurons@meta.data$whole_names <- factor(Neurons@meta.data$whole_names, levels = c(
+  "unknown Glycinergic Interneurons",
+  "prdm14- Motor Neurons",
+  "prdm14+ Motor Neurons",
+  "KA'' GABAergic Interneurons",
+  "Intermediate KA Interneurons",
+  "KA' GABAergic/Dopaminergic Interneurons",
+  "V2b GABAergic/Glycinergic Interneurons",
+  "V2a Glutamatergic/Cholinergic Interneurons",
+  "V1 GABAergic/Glycinergic Interneurons",
+  "V0 Glutamatergic Interneurons",
+  "dI6 Glycinergic Interneurons",
+  "Rohon Beard Neurons"))
+
+# Pie chart
+ggplot(Neurons@meta.data, aes(x = "", fill = whole_names)) + 
+  geom_bar(position = "fill") + 
+  coord_polar("y", start=0) + 
+  scale_fill_manual(values=Neuronpalette) +
+  facet_wrap(~Sample, ncol= 8) +
+  theme_classic() +
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.title = element_blank(), 
+        strip.background = element_rect(fill = "white", color = "white"), 
+        panel.border = element_blank(), 
+        axis.line = element_blank()) +
+  NoLegend()
+
+# new stacked bar chart
+ggplot(Neurons@meta.data, aes(x = "", fill = whole_names)) + 
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values=Neuronpalette) +
+  facet_wrap(~Sample, ncol= 8) +
+  theme_classic() +
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.title = element_blank(), 
+        strip.background = element_rect(fill = "white", color = "white"), 
+        panel.border = element_blank(), 
+        axis.line = element_blank()) +
+  NoLegend()
+
+ggsave("4E.png", width = 7.3, height = 1.2, units = c("in"), dpi = 300)
+```
+
+Set up a dataframe to look at proportion over time - must run before succeeding chunks
+```{r}
+new <- neural[[]] %>% group_by(whole_names, Sample, Condition2, Age) %>% summarize(n())
+neural[[]] %>% group_by(Sample) %>% summarize(n())
+new$Percentage <- new$Sample
+new$Percentage <- dplyr::recode(new$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+new$Percentage <- new$`n()` / new$Percentage
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+new$prettyPercentage <- specify_decimal((new$Percentage*100), 2)
+```
+
+Double checking that everything holds up relative to total cell numbers - it does
+```{r}
+new <- neural[[]] %>% group_by(whole_names, Sample, Condition, Age) %>% summarize(n())
+
+neural[[]] %>% group_by(Sample) %>% summarize(n())
+new$Percentage <- new$Sample
+new$Percentage <- dplyr::recode(new$Percentage,
+                                "un0dpa" = 5771,
+                                "un1dpa" = 6713,
+                                "un3dpa" = 2698,
+                                "un7dpa" = 476,
+                                "0dpa" = 4792,
+                                "1dpa" = 3858,
+                                "3dpa" = 10124,
+                                "7dpa" = 1420)
+new$Percentage <- new$`n()` / new$Percentage
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+new$prettyPercentage <- specify_decimal((new$Percentage*100), 2)
+```
+
+By each for Figure 4C and Figure 4D!
+```{r}
+ggplot(new[which(new$whole_names == "prdm14- Motor Neurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "magenta2") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_prdm14-_motor_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "prdm14+ Motor Neurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "#9D129F") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_prdm14+_motor_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "KA'' GABAergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "steelblue1") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.11), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_kolmer_agduhr_interneurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+# Now, can I make it work with those missing timepoints
+new
+new[125, 1:4] = as.list(c("Rohon Beard Neurons", "7dpa", "Regenerating", "10dpf"))
+new[125, 5] = as.integer(0)
+new[125, 6] = as.double(0)
+new[125, 7] = as.character(0.00)
+
+new[126, 1:4] = as.list(c("Rohon Beard Neurons", "un7dpa", "Uninjured", "10dpf"))
+new[126, 5] = as.integer(0)
+new[126, 6] = as.double(0)
+new[126, 7] = as.character(0.00)
+
+ggplot(new[which(new$whole_names == "Rohon Beard Neurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "#E5AA70") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_rohon_beard_sensory_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "V1 GABAergic/Glycinergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "mediumturquoise") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_V1_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "V0 Glutamatergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "coral1") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_V0_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+new
+new[127, 1:4] = as.list(c("dI6 Glycinergic Interneurons", "7dpa", "Regenerating", "10dpf"))
+new[127, 5] = as.integer(0)
+new[127, 6] = as.double(0)
+new[127, 7] = as.character(0.00)
+
+new[128, 1:4] = as.list(c("dI6 Glycinergic Interneurons", "un7dpa", "Uninjured", "10dpf"))
+new[128, 5] = as.integer(0)
+new[128, 6] = as.double(0)
+new[128, 7] = as.character(0.00)
+
+ggplot(new[which(new$whole_names == "dI6 Glycinergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "goldenrod1") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_dI6_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "V2a Glutamatergic/Cholinergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "palevioletred1") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_V2a_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "V2b GABAergic/Glycinergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "olivedrab3") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_V2b_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "Intermediate KA Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "dodgerblue3") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_intKA_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+
+ggplot(new[which(new$whole_names == "KA' GABAergic/Dopaminergic Interneurons"), ], aes(x = Age, y = Percentage)) + 
+  geom_bar(stat = "identity", fill = "dodgerblue4") +
+  geom_path(color = "black", group= "Condition2") +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    panel.background = element_rect(fill = "white", colour = "black"), 
+    panel.border = element_rect(linetype = "solid", fill = "NA"),  
+    strip.background = element_blank(),
+    strip.text = element_blank()) +
+  scale_y_continuous(limits = c(0, 0.10), labels = scales::percent_format(scale = 100, accuracy=1)) +
+  facet_wrap(~Condition2, ncol= 1, strip.position = "right")
+ggsave("4_KA'_neurons.png", width = 1, height = 2, units = c("in"), dpi = 300)
+```

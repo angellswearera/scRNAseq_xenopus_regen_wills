@@ -1,0 +1,173 @@
+---
+title: "Untitled"
+output: html_document
+date: "2026-04-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load
+```{r}
+library(rstatix)
+library(dplyr)
+library(car)
+library(GO.db)
+library(Seurat)
+library(readr)
+library(stringr)
+library(clusterProfiler)
+library(scCustomize)
+library(ggplot2)
+
+
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+SET UP GO TERMS
+```{r}
+f <- function(x, pos) dplyr::select(x, X3, X5)
+go_ids <- read_tsv_chunked("QuickGO-annotations-1750272346286-20250618.gaf", callback = DataFrameCallback$new(f), col_names = FALSE)
+colnames(go_ids) <- c("gene", "GOID")
+
+df <- AnnotationDbi::select(GO.db, columns=c("GOID","TERM", "ONTOLOGY"), keys = c("BP", "CC", "MF"), keytype="ONTOLOGY")
+go_ids <- left_join(go_ids, df, join_by("GOID"))
+go_ids <- go_ids %>% filter(!is.na(TERM))
+go_ids <- unique.data.frame(go_ids)
+go_ids
+
+#Creates table of all differentially expressed genes between matched timepoints in regenerating and uninjured #conditions in three major cell states (NPC, Differentiating Neurons, Neurons)
+
+neural$sample.state <- paste(neural$Sample, neural$actual_cell_types, sep = "_")
+neural$sample.state <- factor(neural$sample.state)
+Idents(neural) <- "sample.state"
+sample.states <- levels(neural$sample.state)
+de_genes <- data.frame(gene = c(), log2FC = c())
+index <- 1
+
+for (i in 1:12) {
+  neural.de <- FindMarkers(object = neural,
+                         ident.1 = sample.states[index],
+                         ident.2 = sample.states[index+12], 
+                         verbose = FALSE, min.pct = 0.3, 
+                         min.cells.group = 0, assay = "RNA")
+  genes <- data.frame(rownames(neural.de), neural.de$avg_log2FC)
+  colnames(genes) <- c("gene", "log2FC")
+  genes$direction <- "upregulated"
+  genes$direction[genes$log2FC < 0] <- "downregulated"
+  genes$Age <- paste0(substring(sample.states[index], 1, 1), "dpa")
+  genes$cell_type <- substring(sample.states[index], 6, nchar(sample.states[index]))
+  de_genes <- rbind(de_genes, genes)
+  index <- index + 1
+}
+
+
+#Performs GO analysis on each sample and identifies upregulated and downregulated terms enriched at each #timepoint amongst differentially expressed genes with a fold change >= 1.5 (NPC, Differentiating Neurons, #Neurons)
+
+enrich_genes <- de_genes %>% filter(abs(log2FC) >= log2(1.5))
+formula_res <- compareCluster(gene~direction+Age+cell_type, data=enrich_genes, fun="enricher", TERM2GENE=go_ids[go_ids$ONTOLOGY == "BP", c("TERM", "gene")])
+temp <- data.frame(paste(formula_res@compareClusterResult[["Description"]],formula_res@compareClusterResult[["Cluster"]]), formula_res@compareClusterResult[["geneID"]])
+colnames(temp) <- c("Description", "geneID")
+temp$geneID <- strsplit(temp$geneID, "/")
+temp1 <- as.list(temp$geneID)
+names(temp1) <- temp$Description
+temp1 <- stack(temp1)
+temp1$Age <- str_extract(temp1$ind, ".dpa")
+temp1
+temp1$cell_type <- str_extract(temp1$ind, "Neurons|Differentiating Neurons|Neural Progenitor Cells")
+temp1 <- left_join(temp1, de_genes %>% dplyr::select(gene, log2FC, Age, cell_type), by = join_by(values == gene, Age == Age, cell_type == cell_type))
+temp <- temp1 %>% dplyr::group_by(ind) %>% summarize(avglog2FC = mean(log2FC))
+enriched_go <- data.frame(formula_res)
+enriched_go <- mutate(enriched_go, avglog2foldChange = temp$avglog2FC)
+go_id_map <- data.frame(go_ids$GOID, go_ids$TERM)
+go_id_map <- unique.data.frame(go_id_map)
+enriched_go$ID <- plyr::mapvalues(enriched_go$ID,go_id_map$go_ids.TERM,go_id_map$go_ids.GOID,warn_missing = F)
+```
+
+Figure S11A
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("cell migration")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+de_genes
+neu_de_genes <- de_genes %>% filter(direction == "upregulated", log2FC > log2(1.5)) %>% dplyr::select(gene)
+
+Condpalette = c("Uninjured" = "white", "Regenerating" = "grey")
+
+ggplot(neural@meta.data, aes(x = final_names, y = interest1, fill = Condition2, lwd = "black")) + 
+  scale_fill_manual(values = Condpalette) +
+  geom_boxplot(lwd = 0.4, outlier.shape=NA) +
+  ylab("Cell Migration") +
+  theme(panel.background = element_blank(), 
+        axis.line = element_line(color = "black"), 
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank()) +
+  NoLegend()
+```
+pseudo_neurons <- AverageExpression(subset(neural), 
+                                             assays = "RNA", 
+                                             return.seurat = T, 
+                                             group.by = c("Sample"))
+
+agg_neurons <- pseudo_neurons[["RNA"]]$scale.data
+
+neu_diff_genes <- go_ids %>% 
+  filter(TERM %in% c("cell migration")) %>% 
+  dplyr::select(gene)
+
+genes_of_interest <- list(intersect(neu_diff_genes[[1]],neu_de_genes$gene))
+
+agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],]
+
+
+agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],]
+palette <- colorRampPalette(c("navyblue", "limegreen", "goldenrod1"))
+heatmap(agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],],
+          Colv = NA,
+          col = palette(100),
+          keep.dendro = TRUE)
+
+DotPlot(neural, 
+        features = c("neurog1", "neurog2", "ascl1"), 
+    #    group.by = "Sample",
+     #   cols = c("lightgoldenrod1", "red3")) +
+ # coord_flip()
+
+ggsave("S11B.png", width = 5, height = 7, units = c("in"), dpi = 300)
+
+
+Figure S5E,F
+```{r}
+de_genes
+neu_de_genes <- de_genes %>% filter(direction == "upregulated", log2FC > log2(1.5)) %>% dplyr::select(gene)
+
+pseudo_neurons <- AverageExpression(subset(neural), 
+                                             assays = "RNA", 
+                                             return.seurat = T, 
+                                             group.by = c("Sample"))
+
+agg_neurons <- pseudo_neurons[["RNA"]]$scale.data
+
+neu_diff_genes <- go_ids %>% 
+  filter(TERM %in% c("cell migration")) %>% 
+  dplyr::select(gene)
+
+genes_of_interest <- list(intersect(neu_diff_genes[[1]],neu_de_genes$gene))
+
+agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],]
+
+palette <- colorRampPalette(c("navyblue", "limegreen", "goldenrod1"))
+heatmap(agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],],
+          Colv = NA,
+          col = palette(100),
+          keep.dendro = TRUE)
+```
+
+```

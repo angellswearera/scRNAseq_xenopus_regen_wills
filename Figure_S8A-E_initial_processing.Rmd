@@ -1,0 +1,194 @@
+---
+title: "iNeuron_analysis"
+output: html_document
+date: "2025-11-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(DoubletFinder)
+library(readr)
+```
+
+Let's just load and process the dataset with Seurat
+```{r}
+wpi1.1 <- Read10X(data.dir = "1wpi1_filtered_feature_bc_matrix")
+wpi1.1 <- CreateSeuratObject(counts = wpi1.1, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+wpi1.2 <- Read10X(data.dir = "1wpi2_filtered_feature_bc_matrix")
+wpi1.2 <- CreateSeuratObject(counts = wpi1.2, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+wpi3.1 <- Read10X(data.dir = "3wpi1_filtered_feature_bc_matrix")
+wpi3.1 <- CreateSeuratObject(counts = wpi3.1, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+wpi3.2 <- Read10X(data.dir = "3wpi2_filtered_feature_bc_matrix")
+wpi3.2 <- CreateSeuratObject(counts = wpi3.2, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+wpi6.1 <- Read10X(data.dir = "6wpi1_filtered_feature_bc_matrix")
+wpi6.1 <- CreateSeuratObject(counts = wpi6.1, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+wpi6.2 <- Read10X(data.dir = "6wpi2_filtered_feature_bc_matrix")
+wpi6.2 <- CreateSeuratObject(counts = wpi6.2, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+Uninjured.1 <- Read10X(data.dir = "Uninjured1_filtered_feature_bc_matrix")
+Uninjured.1 <- CreateSeuratObject(counts = Uninjured.1, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+Uninjured.2 <- Read10X(data.dir = "Uninjured2_filtered_feature_bc_matrix")
+Uninjured.2 <- CreateSeuratObject(counts = Uninjured.2, min.cells = 3, min.features = 200, names.field = 2, names.delim = "-")
+
+```
+
+Merge, Follow same QC as in Xenopus data
+```{r}
+saraswathy <- merge(Uninjured.1, y = c(wpi1.1, wpi1.2, wpi3.1, wpi3.2, wpi6.1, wpi6.2, Uninjured.2), add.cell.ids = c("Uninjured.1", "wpi1.1", "wpi1.2", "wpi3.1", "wpi3.2", "wpi6.1", "wpi6.2", "Uninjured.2"), project = "saraswathy")
+
+saraswathy$Ident <- rownames(saraswathy@meta.data)
+saraswathy@meta.data <- separate(saraswathy@meta.data, col = "Ident", into = c("Sample", "Barcode"), sep = "_")
+saraswathy@meta.data$Barcode <- NULL
+
+ggplot(saraswathy[[]]) +
+  geom_point(aes(x=nCount_RNA,y=nFeature_RNA,fill=nFeature_RNA < 500),shape=21,alpha=0.4) + 
+  theme_classic() +
+  scale_x_log10()+
+  scale_y_log10()
+
+ggplot(saraswathy[[]]) +
+  geom_point(aes(x=nCount_RNA,y=nFeature_RNA,fill=Sample),shape=21,alpha=0.4) + 
+  theme_classic() +
+  scale_x_log10()+
+  scale_y_log10()
+
+saraswathy <- subset(saraswathy, subset = nFeature_RNA > 200) # nFeature_RNA > 200 is standard
+
+VlnPlot(saraswathy, features = c("nCount_RNA"), group.by = "Sample", ncol = 2, pt.size = 0)
+```
+
+Normalize and Scale
+```{r}
+saraswathy_scale <- NormalizeData(saraswathy)
+saraswathy_scale <- ScaleData(saraswathy_scale)
+saraswathy_scale <- FindVariableFeatures(saraswathy_scale, selection.method = "vst", nfeatures = 2000)
+saraswathy_scale <- RunPCA(saraswathy_scale, features = VariableFeatures(object = saraswathy))
+
+saraswathy_scale <- FindNeighbors(saraswathy_scale, dims=1:50, reduction = "pca")
+saraswathy_scale <- FindClusters(saraswathy_scale, resolution = 2)
+saraswathy_scale <- RunUMAP(saraswathy_scale, dims = 1:50)
+DimPlot(saraswathy_scale, group.by = "Sample")
+```
+
+Additionally integrate it so that the Samples don't batch separately as much
+```{r}
+# Change rStudio settings so I can run this
+options(future.globals.maxSize = 1024^10)
+
+# Integrate by Sample
+tail_int <- saraswathy_scale
+tail_int[["RNA"]] <- JoinLayers(tail_int[["RNA"]])
+tail_int[["RNA"]] <- split(tail_int[["RNA"]], f = tail_int$Sample)
+tail_int <- IntegrateLayers(object = tail_int, method = RPCAIntegration, orig.reduction = "pca", new.reduction = "integrated.rpca", verbose = FALSE)
+tail_int[["RNA"]] <- JoinLayers(tail_int[["RNA"]])
+
+# Process
+tail_int <- FindNeighbors(tail_int, dims=1:50, reduction = "integrated.rpca")
+saraswathy <- FindClusters(saraswathy, resolution = 0.1)
+tail_int <- RunUMAP(tail_int, dims = 1:50, reduction = "integrated.rpca")
+
+# Visualize
+DimPlot(tail_int, reduction = "umap", group.by = "Sample")
+DimPlot(tail_int, reduction = "umap", split.by = "Sample")
+saraswathy <- tail_int
+
+DimPlot(saraswathy, reduction = "umap", group.by = "Sample")
+```
+
+Identify different cell types based on marker genes identified in paper
+```{r}
+# Neurons A
+FeaturePlot(saraswathy, features = c("elavl3", "TENM2", "snap25a", "ncam2"))
+
+# Glia/ERGs
+FeaturePlot(saraswathy, features = c("gfap", "pkd1b", "cfap57", "slc4a10a"))
+
+# OPCs
+FeaturePlot(saraswathy, features = c("cspg4", "dscamb", "sema5a", "traf4a"))
+
+# Oligos A
+FeaturePlot(saraswathy, features = c("mpz", "mbpa", "sc44a1b", "mag"))
+
+# Oligos B
+FeaturePlot(saraswathy, features = c("scn4ab", "gfra1a", "cntn1a", "ndnf"))
+
+# Leukocytes A
+FeaturePlot(saraswathy, features = c("lgals9l1", "ptprc", "cd74a", "csf1ra"))
+
+# Leukocytes B
+FeaturePlot(saraswathy, features = c("si:dkey-241l7.2", "si:dkey-241l7.4"))
+
+# Erythrocytes
+FeaturePlot(saraswathy, features = c("lyz", "hbba1"))
+
+# Save
+saveRDS(saraswathy, file = "../saraswathy.rds")
+```
+
+Select out Neurons, and process
+```{r}
+#saraswathy <- LoadSeuratRds(file = "../saraswathy.rds")
+
+# Subset out Neuron clusters, including cluster 0 which seems non-specific?
+saraswathy_neural <- subset(x = saraswathy, subset = (seurat_clusters == 10 | seurat_clusters == 11 | seurat_clusters == 6 | seurat_clusters == 8 | seurat_clusters == 5 | seurat_clusters == 4 | seurat_clusters == 12 | seurat_clusters == 15 | seurat_clusters == 16 | seurat_clusters == 0))
+                                                        
+saraswathy_scale <- NormalizeData(saraswathy_neural)
+saraswathy_scale <- ScaleData(saraswathy_scale)
+saraswathy_scale <- FindVariableFeatures(saraswathy_scale, selection.method = "vst", nfeatures = 2000)
+saraswathy_scale <- RunPCA(saraswathy_scale, features = VariableFeatures(object = saraswathy))
+
+saraswathy_scale <- FindNeighbors(saraswathy_scale, dims=1:50, reduction = "pca")
+saraswathy_scale <- FindClusters(saraswathy_scale, resolution = 0.2)
+saraswathy_scale <- RunUMAP(saraswathy_scale, dims = 1:50)
+
+DimPlot(saraswathy_scale, group.by = "seurat_clusters", label = TRUE)
+
+saraswathy_neural <- saraswathy_scale
+
+## Double check identification
+# Neurons
+FeaturePlot(saraswathy_neural, features = c("elavl3", "TENM2", "snap25a", "ncam2"))
+
+# Glia/ERGs
+FeaturePlot(saraswathy_neural, features = c("gfap", "pkd1b", "cfap57", "slc4a10a"))
+
+# OPCs
+FeaturePlot(saraswathy_neural, features = c("cspg4", "dscamb", "sema5a", "traf4a"))
+
+# Oligos A
+FeaturePlot(saraswathy_neural, features = c("mpz", "mbpa", "sc44a1b", "mag"))
+
+# Oligos B
+FeaturePlot(saraswathy_neural, features = c("scn4ab", "gfra1a", "cntn1a", "ndnf"))
+
+# Leukocytes A
+FeaturePlot(saraswathy_neural, features = c("lgals9l1", "ptprc", "cd74a", "csf1ra"))
+
+# Leukocytes B
+FeaturePlot(saraswathy_neural, features = c("si:dkey-241l7.2", "si:dkey-241l7.4"))
+
+# Erythrocytes
+FeaturePlot(saraswathy_neural, features = c("lyz", "hbba1"))
+
+DimPlot(saraswathy_neural, group.by = "seurat_clusters", label = TRUE)
+
+# re-subset to identify only Neurons
+saraswathy_neural <- subset(x = saraswathy_neural, subset = (seurat_clusters == 10 | seurat_clusters == 11 | seurat_clusters == 9 | seurat_clusters == 0 | seurat_clusters == 4 | seurat_clusters == 7 | seurat_clusters == 6 | seurat_clusters == 5 | seurat_clusters == 13 | seurat_clusters == 2 | seurat_clusters == 15 | seurat_clusters == 13 | seurat_clusters == 17 | seurat_clusters == 14 | seurat_clusters == 8))
+
+#reprocess (i.e. run through above normalization measures, etc again) and save
+
+saveRDS(saraswathy_neural, file = "../saraswathy_Neurons.rds")
+```

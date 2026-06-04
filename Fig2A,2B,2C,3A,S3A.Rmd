@@ -1,0 +1,250 @@
+---
+title: "Figures_1_4"
+output: html_document
+date: "2025-10-16"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load everything
+```{r}
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+Doing some housekeeping quick and re-save - Don't need to do if you have the final rds
+```{r}
+
+neural@meta.data$Condition <- as.character(neural@meta.data$Sample)
+neural@meta.data$Condition =
+  dplyr::recode(neural@meta.data$Condition,
+                "0dpa" = "Uninjured",
+                "1dpa" = "Regenerating",
+                "3dpa" = "Regenerating",
+                "7dpa" = "Regenerating",
+                "un0dpa" = "Uninjured",
+                "un1dpa" = "Uninjured",
+                "un3dpa" = "Uninjured",
+                "un7dpa" = "Uninjured")
+neural@meta.data$Condition <- factor(neural@meta.data$Condition, levels = c("Uninjured", "Regenerating"))
+
+neural@meta.data$Condition2 <- as.character(neural@meta.data$Sample)
+neural@meta.data$Condition2 =
+  dplyr::recode(neural@meta.data$Condition2,
+                "0dpa" = "Regenerating",
+                "1dpa" = "Regenerating",
+                "3dpa" = "Regenerating",
+                "7dpa" = "Regenerating",
+                "un0dpa" = "Uninjured",
+                "un1dpa" = "Uninjured",
+                "un3dpa" = "Uninjured",
+                "un7dpa" = "Uninjured")
+neural@meta.data$Condition2 <- factor(neural@meta.data$Condition2, levels = c("Uninjured", "Regenerating"))
+
+neural@meta.data$Age <- as.character(neural@meta.data$Sample)
+neural@meta.data$Age =
+  dplyr::recode(neural@meta.data$Age,
+                "0dpa" = "3dpf",
+                "1dpa" = "4dpf",
+                "3dpa" = "6dpf",
+                "7dpa" = "10dpf",
+                "un0dpa" = "3dpf",
+                "un1dpa" = "4dpf",
+                "un3dpa" = "6dpf",
+                "un7dpa" = "10dpf")
+neural@meta.data$Age <- factor(neural@meta.data$Age, levels = c("3dpf", "4dpf", "6dpf", "10dpf"))
+
+neural[[]]
+
+# clean up
+neural@meta.data <- neural@meta.data[, -which(colnames(neural@meta.data) %in% 'cell_types')]
+neural@meta.data <- neural@meta.data[, -which(colnames(neural@meta.data) %in% 'nFeat_good')]
+neural@meta.data <- neural@meta.data[, -which(colnames(neural@meta.data) %in% 'NoGood')]
+
+neural[[]]
+
+saveRDS(neural, file = "neural_final.rds")
+```
+
+TO BE PROCESSED AFTER SEURAT_NEURAL_CLUSTERS.RMD
+
+Okay now to get into the plots and palettes for Figure 2B
+```{r}
+# I'm going to recombine some things into their final categories for the paper
+neural@meta.data$neural_cell_types <- dplyr::recode(neural@meta.data$neural_cell_types,
+                                "GABA/Glycinergic Interneurons" = "Inhibitory Interneurons",
+                                "Glutamatergic Interneurons" = "Excitatory Interneurons",
+                                "lep+ Motor Neurons" = "isl2+ Motor Neurons",
+                                "Motor Neurons" = "isl2+ Motor Neurons",
+                                "vsx2+ Interneurons" = "vsx2+ Interneurons")
+
+neural@meta.data$neural_cell_types <- factor(neural@meta.data$neural_cell_types, levels = c(
+               "Floor Plate",
+               "Roof Plate",
+               "Neural Progenitor Cells",
+               "Differentiating Motor Neurons",
+               "isl2+ Motor Neurons",
+               "prdm14+ Motor Neurons",
+               "Differentiating Interneurons",
+               "Excitatory Interneurons", 
+               "Inhibitory Interneurons",
+               "Kolmer-Agduhr Interneurons",
+               "Rohon Beard Neurons"))
+
+# make a palette
+palette <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#EBC2F3",
+             "isl2+ Motor Neurons" = "magenta2",
+             "isl2+ Motor Neurons" = "magenta2",
+             "Excitatory Interneurons" = "#196018", 
+             "prdm14+ Motor Neurons" = "#AD03AE",
+             "Inhibitory Interneurons" = "#00B100",
+             "Kolmer-Agduhr Interneurons" = "#7BD186",
+             "Roof Plate" = "#EBEBEB",
+             "Differentiating Interneurons" = "#B7E9BA",
+             "Floor Plate" = "#B3B3B3",
+             "Rohon Beard Neurons" = "#ECB76F")
+
+# make a umap
+DimPlot(neural, group.by = "neural_cell_types", label = FALSE, label.size = 3, repel = TRUE, cols = palette) +   theme(axis.ticks=element_blank(), axis.text=element_blank(), plot.title=element_blank(), axis.line = element_blank(), axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-11, 7)) + scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(6, 'pt')))
+#ggsave("2B.png", width = 4.5, height = 3.5, units = c("in"), dpi = 300)
+```
+
+Figure 2C
+```{r}
+# Looking for markers...
+neural.markers <- FindAllMarkers(neural, only.pos = TRUE, group.by = "neural_cell_types")
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+
+neural.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 3) %>%
+    ungroup() -> top3
+
+# since some of the genes aren't present in the RNA layer, I have to add them into a "top3" dataset to call them for the heatmap instead
+neural_cell_types <- top3$cluster
+gene <- top3$gene
+myTop3 <- data.frame(neural_cell_types = neural_cell_types, gene = gene)
+myTop3
+
+myTop3[7, 1:2] = as.list(c("Neural Progenitor Cells", "slc1a3"))
+myTop3[8, 1:2] = as.list(c("Neural Progenitor Cells", "hes5"))
+myTop3[9, 1:2] = as.list(c("Neural Progenitor Cells", "serpinf1"))
+
+# Making a marker heatmap for neural_cell_types
+DoHeatmap(neural, features = myTop3$gene, group.by = "neural_cell_types", group.colors = palette, size = 3, draw.lines = FALSE) + 
+  theme(text=element_text(size=7), 
+        plot.margin = margin(0.5, 0.75, 0, 0, "in"), 
+        legend.position="none") +
+  scale_fill_gradientn(colors = c("grey", "white", "navyblue"))
+
+#ggsave("2C.png", width = 6.5, height = 3.35, units = c("in"), dpi = 300)
+```
+
+Figure 3A - HCR and faceted umaps
+```{r}
+# Figure 3
+palette2 <- c("Neural Progenitor Cells" = "#D6D6D6",
+             "Differentiating Motor Neurons" = "#D6D6D6",
+             "isl2+ Motor Neurons" = "magenta2",
+             "isl2+ Motor Neurons" = "magenta2",
+             "Inhibitory Interneurons" = "green1", 
+             "prdm14+ Motor Neurons" = "cyan",
+             "Excitatory Interneurons" = "green1",
+             "Kolmer-Agduhr Interneurons" = "#B7E9BA",
+             "vsx2+ Interneurons" = "#B7E9BA",
+             "Roof Plate" = "#D6D6D6",
+             "Differentiating Interneurons" = "#D6D6D6",
+             "Floor Plate" = "#D6D6D6",
+             "Rohon Beard Neurons" = "#FFD62B")
+
+# make faceted umap for Figure 3A
+DimPlot(neural, 
+        group.by = "neural_cell_types", 
+        pt.size = 0.01, 
+        split.by = "Sample", 
+        label = FALSE, 
+        label.size = 3, 
+        repel = TRUE, 
+        cols = palette2, 
+        ncol= 4) + 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) +
+  scale_y_continuous(limits = c(-12, 7)) + 
+  scale_x_continuous(limits = c(-9, 10)) +
+  NoLegend() +
+  annotate("segment", 
+            x = -9, xend = -9 + c(5, 0),
+            y = -12, yend = -12 + c(0, 5),
+           arrow = arrow(type = "closed", length = unit(3, 'pt')))
+ggsave("3A.png", width = 7, height = 3.5, units = c("in"), dpi = 300)
+
+# make percentages boxplot
+neural@meta.data$neural_cell_types <- factor(neural@meta.data$neural_cell_types, 
+                                             levels = c("Neural Progenitor Cells",
+             "Roof Plate",
+             "Floor Plate",
+             "Differentiating Motor Neurons",
+             "Differentiating Interneurons",
+             "isl2+ Motor Neurons",
+             "prdm14+ Motor Neurons",
+             "Inhibitory Interneurons", 
+             "Excitatory Interneurons",
+             "Kolmer-Agduhr Interneurons",
+             "vsx2+ Interneurons",
+             "Rohon Beard Neurons"))
+
+neural@meta.data$Sample <- factor(neural@meta.data$Sample, 
+                                             levels = c("un0dpa",
+                                                        "0dpa", 
+                                                        "un1dpa", 
+                                                        "1dpa",
+                                                        "un3dpa",
+                                                        "3dpa",
+                                                        "un7dpa",
+                                                        "7dpa"))
+
+# get cell counts for Figure 3A
+dfl <- ddply(neural@meta.data, .(Sample, neural_cell_types), summarize, y=length(neural_cell_types))
+
+# make faceted boxplot for Figure 3A
+ggplot(neural@meta.data[which(neural@meta.data$Sample == "un0dpa" | neural@meta.data$Sample == "un3dpa" | neural@meta.data$Sample == "3dpa" | neural@meta.data$Sample == "un7dpa" | neural@meta.data$Sample == "7dpa"), ], aes(x = Sample, fill = neural_cell_types)) + 
+  geom_bar(position = "fill") + 
+  scale_fill_manual(values=palette2) +
+  theme_classic() +
+  theme(axis.ticks=element_blank(), 
+        plot.title=element_blank(), 
+        axis.title = element_blank(), 
+        legend.position = "None", 
+        strip.background = element_rect(fill = "white", color = "white"), 
+        panel.border = element_blank())
+
+ggsave("3A_boxplot.png", width = 5.7, height = 1.4, units = c("in"), dpi = 300)
+```
+
+Figure S3A
+```{r}
+FeaturePlot(neural,
+            features = c("prdm14", "lhx1", "chat"))
+ggsave("S3A.png", width = 8.5, height = 7, units = c("in"), dpi = 300)
+```

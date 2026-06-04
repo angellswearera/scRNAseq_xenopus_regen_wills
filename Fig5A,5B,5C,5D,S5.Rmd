@@ -1,0 +1,512 @@
+---
+title: "Figure 5"
+output: html_document
+date: "2025-10-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load
+```{r}
+library(rstatix)
+library(dplyr)
+library(car)
+library(GO.db)
+library(Seurat)
+library(readr)
+library(stringr)
+library(clusterProfiler)
+library(scCustomize)
+library(ggplot2)
+
+
+neural <- LoadSeuratRds(file = "neural_final.rds")
+```
+
+My designations have changed since I original called the seurat cell types, so let's make anew column, "actual cell types" - Don't need to do if you have the final rds file
+```{r}
+neural@meta.data$actual_cell_types <- as.character(neural@meta.data$neural_cell_types)
+neural@meta.data$actual_cell_types =
+  dplyr::recode(neural@meta.data$actual_cell_types,
+             "Neural Progenitor Cells" = "Neural Progenitor Cells",
+             "Differentiating Motor Neurons" = "Differentiating Neurons",
+             "Motor Neurons" = "Neurons",
+             "Glutamatergic Interneurons" = "Neurons", 
+             "prdm14+ Motor Neurons" = "Neurons",
+             "lep+ Motor Neurons" = "Neurons",
+             "GABA/Glycinergic Interneurons" = "Neurons",
+             "Kolmer-Agduhr Interneurons" = "Neurons",
+             "Roof Plate" = "Neural Progenitor Cells",
+             "Differentiating Interneurons" = "Differentiating Neurons",
+             "Floor Plate" = "Neural Progenitor Cells",
+             "vsx2+ Interneurons" = "Neurons",
+             "Rohon Beard Neurons" = "Neurons")
+unique(neural@meta.data$actual_cell_types)
+
+neural@meta.data$actual_cell_types <- factor(neural@meta.data$actual_cell_types, levels = c("Neural Progenitor Cells", "Differentiating Neurons", "Neurons"))
+
+#saveRDS(neural, file = "neural.rds")
+```
+
+Figure S5A Phase facet UMAP
+```{r}
+palette <- c("#842682", "#C63D73", "#FC8A61")
+
+DimPlot_scCustom(neural, group.by = "Phase", 
+                 label = FALSE, 
+                 split.by = "Sample", 
+                 num_columns = 8,
+                 colors_use = palette) & 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) &
+ scale_y_continuous(limits = c(-11, 7)) &
+ scale_x_continuous(limits = c(-9, 10)) &
+ # NoLegend() &
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(6, 'pt')))
+
+#ggsave("S4A.png", width = 15, height = 2, units = c("in"), dpi = 300)
+```
+
+Making some bar charts of phases for Figure 5A
+```{r}
+# getting the numbers
+bigNeuralDataframe <- neural[[]] %>% group_by(actual_cell_types, Sample, Condition2, Age) %>% summarize(n())
+neural[[]] %>% group_by(Sample) %>% summarize(n())
+bigNeuralDataframe$Percentage <- bigNeuralDataframe$Sample
+bigNeuralDataframe$Percentage <- dplyr::recode(bigNeuralDataframe$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+
+bigNeuralDataframe$Percentage <- bigNeuralDataframe$`n()` / bigNeuralDataframe$Percentage
+bigNeuralDataframe
+
+Bigpalette = c("G1" = "grey20", "G0" = "grey45", "S" = "#D6D6D6")
+
+neural@meta.data$Phase <- factor(neural@meta.data$Phase, levels = c("S", "G2M", "G1"))
+
+# actual plot
+ggplot(neural@meta.data, aes(x = Age, fill = Phase)) + 
+  geom_bar(position = "fill", color = "black") + 
+  facet_wrap(~Condition2) +
+  scale_fill_manual(values=Bigpalette) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    axis.text.x = element_blank(),
+    panel.background = element_rect(fill = "white"), 
+    strip.background = element_blank(),
+    strip.text = element_blank(), panel.border = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=1))
+
+#ggsave("5A.png", width = 2.25, height = 1.9, units = c("in"), dpi = 300)
+```
+
+Plots for Figure 5B
+```{r}
+# back to normal figure
+bigNeuralDataframe <- neural[[]] %>% group_by(actual_cell_types, Sample, Condition2, Age) %>% summarize(n())
+bigNeuralDataframe$Score <- bigNeuralDataframe$Sample
+bigNeuralDataframe$Score <- dplyr::recode(bigNeuralDataframe$Score,
+  "un0dpa" = "0.0196694904",			
+  "un1dpa" =	"0.0008685252",			
+  "un3dpa" =	"-0.0094266682",			
+  "un7dpa" = "-0.0116251256",			
+  "0dpa" =	"0.0032123799",		
+  "1dpa" =	"-0.0144049534",			
+  "3dpa" =	"0.0329315755",			
+  "7dpa" =	"-0.0087068619")
+
+bigNeuralDataframe$Score3 <- bigNeuralDataframe$Sample
+bigNeuralDataframe$Score3 <- dplyr::recode(bigNeuralDataframe$Score3,
+  "un0dpa" = "-3.727419e-05",			
+  "un1dpa" =	"-2.745690e-02",			
+  "un3dpa" =	"-2.684760e-02",			
+  "un7dpa" = "-3.190311e-02",			
+  "0dpa" =	"1.276520e-02",		
+  "1dpa" =	"-2.951595e-02",			
+  "3dpa" =	"-2.637207e-02",			
+  "7dpa" =	"1.820343e-02")
+                                               
+neural[[]] %>% group_by(Sample) %>% summarize(n())
+bigNeuralDataframe$Percentage <- bigNeuralDataframe$Sample
+bigNeuralDataframe$Percentage <- dplyr::recode(bigNeuralDataframe$Percentage,
+                                "un0dpa" = 781,
+                                "un1dpa" = 984,
+                                "un3dpa" = 702,
+                                "un7dpa" = 126,
+                                "0dpa" = 1115,
+                                "1dpa" = 1408,
+                                "3dpa" = 1726,
+                                "7dpa" = 495)
+
+bigNeuralDataframe$Percentage <- bigNeuralDataframe$`n()` / bigNeuralDataframe$Percentage
+
+Bigpalette = c("Neural Progenitor Cells" = "#D6D6D6", "Differentiating Neurons" = "grey45", "Neurons" = "grey20")
+
+# actual plot
+ggplot(neural@meta.data, aes(x = Age, fill = actual_cell_types)) + 
+  geom_bar(position = "fill", color = "black") + 
+  facet_wrap(~Condition2) +
+  scale_fill_manual(values=Bigpalette) +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  theme(legend.position = "none", 
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 8, color = "black"), 
+    axis.text.x = element_blank(), 
+    panel.background = element_rect(fill = "white"), 
+    strip.background = element_blank(),
+    strip.text = element_blank(), panel.border = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100, accuracy=1))
+
+#ggsave("5B.png", width = 2.25, height = 1.9, units = c("in"), dpi = 300)
+```
+
+SET UP GO TERMS
+```{r}
+f <- function(x, pos) dplyr::select(x, X3, X5)
+go_ids <- read_tsv_chunked("QuickGO-annotations-1750272346286-20250618.gaf", callback = DataFrameCallback$new(f), col_names = FALSE)
+colnames(go_ids) <- c("gene", "GOID")
+
+df <- AnnotationDbi::select(GO.db, columns=c("GOID","TERM", "ONTOLOGY"), keys = c("BP", "CC", "MF"), keytype="ONTOLOGY")
+go_ids <- left_join(go_ids, df, join_by("GOID"))
+go_ids <- go_ids %>% filter(!is.na(TERM))
+go_ids <- unique.data.frame(go_ids)
+go_ids
+
+#Creates table of all differentially expressed genes between matched timepoints in regenerating and uninjured #conditions in three major cell states (NPC, Differentiating Neurons, Neurons)
+
+neural$sample.state <- paste(neural$Sample, neural$actual_cell_types, sep = "_")
+neural$sample.state <- factor(neural$sample.state)
+Idents(neural) <- "sample.state"
+sample.states <- levels(neural$sample.state)
+de_genes <- data.frame(gene = c(), log2FC = c())
+index <- 1
+
+for (i in 1:12) {
+  neural.de <- FindMarkers(object = neural,
+                         ident.1 = sample.states[index],
+                         ident.2 = sample.states[index+12], 
+                         verbose = FALSE, min.pct = 0.3, 
+                         min.cells.group = 0, assay = "RNA")
+  genes <- data.frame(rownames(neural.de), neural.de$avg_log2FC)
+  colnames(genes) <- c("gene", "log2FC")
+  genes$direction <- "upregulated"
+  genes$direction[genes$log2FC < 0] <- "downregulated"
+  genes$Age <- paste0(substring(sample.states[index], 1, 1), "dpa")
+  genes$cell_type <- substring(sample.states[index], 6, nchar(sample.states[index]))
+  de_genes <- rbind(de_genes, genes)
+  index <- index + 1
+}
+
+
+#Performs GO analysis on each sample and identifies upregulated and downregulated terms enriched at each #timepoint amongst differentially expressed genes with a fold change >= 1.5 (NPC, Differentiating Neurons, #Neurons)
+
+enrich_genes <- de_genes %>% filter(abs(log2FC) >= log2(1.5))
+formula_res <- compareCluster(gene~direction+Age+cell_type, data=enrich_genes, fun="enricher", TERM2GENE=go_ids[go_ids$ONTOLOGY == "BP", c("TERM", "gene")])
+temp <- data.frame(paste(formula_res@compareClusterResult[["Description"]],formula_res@compareClusterResult[["Cluster"]]), formula_res@compareClusterResult[["geneID"]])
+colnames(temp) <- c("Description", "geneID")
+temp$geneID <- strsplit(temp$geneID, "/")
+temp1 <- as.list(temp$geneID)
+names(temp1) <- temp$Description
+temp1 <- stack(temp1)
+temp1$Age <- str_extract(temp1$ind, ".dpa")
+temp1
+temp1$cell_type <- str_extract(temp1$ind, "Neurons|Differentiating Neurons|Neural Progenitor Cells")
+temp1 <- left_join(temp1, de_genes %>% dplyr::select(gene, log2FC, Age, cell_type), by = join_by(values == gene, Age == Age, cell_type == cell_type))
+temp <- temp1 %>% dplyr::group_by(ind) %>% summarize(avglog2FC = mean(log2FC))
+enriched_go <- data.frame(formula_res)
+enriched_go <- mutate(enriched_go, avglog2foldChange = temp$avglog2FC)
+go_id_map <- data.frame(go_ids$GOID, go_ids$TERM)
+go_id_map <- unique.data.frame(go_id_map)
+enriched_go$ID <- plyr::mapvalues(enriched_go$ID,go_id_map$go_ids.TERM,go_id_map$go_ids.GOID,warn_missing = F)
+```
+
+INDIVIDUAL GO TERMS (cell division, Figure 5C)
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("cell division")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+# visualizing score on the UMAP
+FeaturePlot_scCustom(neural, reduction = "umap", 
+            pt.size = 1, 
+            features = "interest1", 
+            order = TRUE,
+            split.by = "Condition2",
+            num_columns = 2) & 
+  scale_color_distiller(palette = "RdYlBu")
+
+# cell division GO term over actual_cell_types and Sample
+ggplot(neural@meta.data, aes(x = actual_cell_types, y = interest1, fill = Sample)) + 
+  geom_boxplot(alpha = 0.1) + 
+  theme(panel.background = element_blank(), axis.line = element_line(color = "black"), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+# Figure 5C
+Condpalette = c("Uninjured" = "white", "Regenerating" = "grey")
+
+ggplot(neural@meta.data, aes(x = Sample, y = interest1, fill = Condition2, lwd = "black")) + 
+  scale_fill_manual(values = Condpalette) +
+  geom_boxplot(lwd = 0.4, outlier.shape=NA) +
+  ylab("Cell Division") +
+  theme(panel.background = element_blank(), 
+        axis.line = element_line(color = "black"), 
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank()) +
+  NoLegend()
+
+#ggsave("5C.png", width = 2, height = 2.5, units = c("in"), dpi = 300)
+```
+
+# Stats for celldivision (interest1)
+```{r}
+meta <- neural[[]] %>% dplyr::select(Sample, Condition2, interest1)
+meta <- meta[which(meta$Condition2 == "Regenerating"),]
+#Statistics for module plot
+atab <- aov(interest1~Sample, data = meta)
+#Levene test for equal variances
+leveneTest(interest1~Sample,  meta)
+# Extract the residuals
+aov_residuals <- residuals(object = atab)
+# Run Shapiro-Wilk test for normality
+shapiro.test(x = aov_residuals)
+# Kruskal-Wallis test = non-parametric multiple comparisons
+#kruskal.test(interest1~Condition, data = meta)
+#Wilcox test = non-parametric pairwise comparisons
+
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "1dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "3dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "7dpa")))
+```
+
+```{r}
+meta <- neural[[]] %>% dplyr::select(Sample, Condition2, interest1)
+#meta <- meta[which(meta$Condition2 == "Uninjured"),]
+#Statistics for neuron_differentiation module plot
+atab <- aov(interest1~Sample, data = meta)
+#Levene test for equal variances
+leveneTest(interest1~Sample,  meta)
+# Extract the residuals
+aov_residuals <- residuals(object = atab)
+# Run Shapiro-Wilk test for normality
+shapiro.test(x = aov_residuals)
+# Kruskal-Wallis test = non-parametric multiple comparisons
+#kruskal.test(interest1~Condition, data = meta)
+#Wilcox test = non-parametric pairwise comparisons
+
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "1dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "3dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "7dpa")))
+```
+
+# Figure S5B - cell division UMAPS over Samples
+```{r}
+FeaturePlot_scCustom(neural, features = "interest1", 
+                 label = FALSE, 
+                 split.by = "Sample", 
+                 num_columns = 8,
+                 colors_use = viridis_magma_dark_high) & 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) &
+ scale_y_continuous(limits = c(-11, 7)) &
+ scale_x_continuous(limits = c(-9, 10)) &
+ # NoLegend() &
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(6, 'pt')))
+
+#ggsave("S5B.png", width = 15, height = 2, units = c("in"), dpi = 300)
+```
+
+Figure S5E
+```{r}
+neu_de_genes <- de_genes %>% filter(direction == "upregulated", log2FC > log2(1.5)) %>% dplyr::select(gene)
+
+pseudo_neurons <- AverageExpression(subset(neural), 
+                                             assays = "RNA", 
+                                             return.seurat = T, 
+                                             group.by = c("Sample"))
+
+agg_neurons <- pseudo_neurons[["RNA"]]$scale.data
+
+neu_diff_genes <- go_ids %>% 
+  filter(TERM %in% c("cell division")) %>% 
+  dplyr::select(gene)
+
+genes_of_interest <- list(intersect(neu_diff_genes[[1]],neu_de_genes$gene))
+
+agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],]
+
+palette <- colorRampPalette(c("lightgoldenrod1", "red3"))
+heatmap(agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],],
+          Colv = NA,
+          col = palette(100),
+          keep.dendro = FALSE)
+```
+
+INDIVIDUAL GO TERMS (neuron differentiation, Figure 5D)
+```{r}
+genes <- Features(neural)
+
+genes_of_interest <- go_ids %>% 
+  filter(TERM %in% c("neuron differentiation")) %>% 
+  dplyr::select(gene)
+genes_of_interest <- unique.data.frame(genes_of_interest)
+genes_of_interest <- list(intersect(genes_of_interest$gene,genes))
+neural <- AddModuleScore(neural, features = genes_of_interest, name = "interest")
+
+# visualizing score on the UMAP
+FeaturePlot_scCustom(neural, reduction = "umap", 
+            pt.size = 1, 
+            features = "interest1", 
+            order = TRUE,
+            split.by = "Condition2",
+            num_columns = 2) & 
+  scale_color_distiller(palette = "RdYlBu")
+
+# cell division GO term over actual_cell_types and Sample
+ggplot(neural@meta.data, aes(x = actual_cell_types, y = interest1, fill = Sample)) + 
+  geom_boxplot(alpha = 0.1) + 
+  theme(panel.background = element_blank(), axis.line = element_line(color = "black"), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+# Figure 5C
+Condpalette = c("Uninjured" = "white", "Regenerating" = "grey")
+
+ggplot(neural@meta.data, aes(x = Sample, y = interest1, fill = Condition2, lwd = "black")) + 
+  scale_fill_manual(values = Condpalette) +
+  geom_boxplot(lwd = 0.4, outlier.shape=NA) +
+  ylab("Cell Division") +
+  theme(panel.background = element_blank(), 
+        axis.line = element_line(color = "black"), 
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank()) +
+  NoLegend()
+
+#ggsave("5D.png", width = 2, height = 2.5, units = c("in"), dpi = 300)
+```
+
+# Stats for neurondifferentiation (interest1)
+```{r}
+meta <- neural[[]] %>% dplyr::select(Sample, Condition2, interest1)
+#meta <- meta[which(meta$Condition2 == "Regenerating"),]
+#Statistics for module plot
+atab <- aov(interest1~Sample, data = meta)
+#Levene test for equal variances
+leveneTest(interest1~Sample,  meta)
+# Extract the residuals
+aov_residuals <- residuals(object = atab)
+# Run Shapiro-Wilk test for normality
+shapiro.test(x = aov_residuals)
+# Kruskal-Wallis test = non-parametric multiple comparisons
+#kruskal.test(interest1~Condition, data = meta)
+#Wilcox test = non-parametric pairwise comparisons
+
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "1dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "3dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("0dpa", "7dpa")))
+```
+
+```{r}
+meta <- neural[[]] %>% dplyr::select(Sample, Condition2, interest1)
+meta <- meta[which(meta$Condition2 == "Uninjured"),]
+#Statistics for neuron_differentiation module plot
+atab <- aov(interest1~Sample, data = meta)
+#Levene test for equal variances
+leveneTest(interest1~Sample,  meta)
+# Extract the residuals
+aov_residuals <- residuals(object = atab)
+# Run Shapiro-Wilk test for normality
+shapiro.test(x = aov_residuals)
+# Kruskal-Wallis test = non-parametric multiple comparisons
+#kruskal.test(interest1~Condition, data = meta)
+#Wilcox test = non-parametric pairwise comparisons
+
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "un1dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "un3dpa")))
+pairwise_wilcox_test(meta, interest1~Sample, comparisons = list(c("un0dpa", "un7dpa")))
+```
+
+# Figure S5C - neuron differentiation UMAPS over Samples
+```{r}
+FeaturePlot_scCustom(neural, features = "interest1", 
+                 label = FALSE, 
+                 split.by = "Sample", 
+                 num_columns = 8,
+                 colors_use = viridis_magma_dark_high) & 
+  theme(axis.ticks=element_blank(), 
+        axis.text=element_blank(), 
+        plot.title=element_blank(), 
+        axis.line = element_blank(), 
+        axis.title = element_blank()) &
+ scale_y_continuous(limits = c(-11, 7)) &
+ scale_x_continuous(limits = c(-9, 10)) &
+ # NoLegend() &
+  annotate("segment", 
+            x = -9, xend = -9 + c(3, 0),
+            y = -11, yend = -11 + c(0, 4),
+           arrow = arrow(type = "closed", length = unit(6, 'pt')))
+
+#ggsave("S5B.png", width = 15, height = 2, units = c("in"), dpi = 300)
+```
+
+Figure S5F
+```{r}
+neu_de_genes <- de_genes %>% filter(direction == "upregulated", log2FC > log2(1.5)) %>% dplyr::select(gene)
+
+pseudo_neurons <- AverageExpression(subset(neural), 
+                                             assays = "RNA", 
+                                             return.seurat = T, 
+                                             group.by = c("Sample"))
+
+agg_neurons <- pseudo_neurons[["RNA"]]$scale.data
+
+neu_diff_genes <- go_ids %>% 
+  filter(TERM %in% c("neuron differentiation")) %>% 
+  dplyr::select(gene)
+
+genes_of_interest <- list(intersect(neu_diff_genes[[1]],neu_de_genes$gene))
+
+agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],]
+
+palette <- colorRampPalette(c("lightgoldenrod1", "red3"))
+heatmap(agg_neurons[rownames(agg_neurons) %in% genes_of_interest[[1]],],
+          Colv = NA,
+          col = palette(100),
+          keep.dendro = FALSE)
+```
+
+Figure S5G
+```{r}
+DotPlot(neural, 
+        features = c("neurog1", "neurog2", "ascl1"), 
+        group.by = "Sample",
+        cols = c("lightgoldenrod1", "red3")) +
+  coord_flip()
+
+ggsave("S5G.png", width = 5, height = 7, units = c("in"), dpi = 300)
+```
